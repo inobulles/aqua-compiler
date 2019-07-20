@@ -45,6 +45,9 @@ elif [ "$code" = "c" ]; then
 	cd langs/c
 	sh build.sh
 	cd ../..
+else
+	echo "WARNING '$code' is not a valid programming language"
+	exit 1
 fi
 
 echo "AQUA compiler terminated with no errors"
