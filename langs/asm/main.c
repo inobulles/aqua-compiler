@@ -165,7 +165,7 @@ static void free_asm(compiler_t* this) {
 }
 
 static void write_rom(compiler_t* this) {
-	FILE* fp = fopen("ROM.zed", "wb");
+	FILE* fp = fopen("rom.zed", "wb");
 	fwrite(this->rom, sizeof(var), this->rom_length, fp);
 	fclose(fp);
 	

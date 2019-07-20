@@ -9,12 +9,12 @@ if [ ! -d "objconv-src" ]; then
 fi
 
 if [ ! -f "objconv" ]; then
-	echo "Compiling objconv ..."
+	echo "Compiling objconv (this, in particular, may take a while) ..."
 	g++ -o objconv -O2 -std=c++98 objconv-src/src/*.cpp
 fi
 
 echo "Compiling code ..."
-rm main.o
+rm -f main.o
 gcc -std=gnu11 -s -c src/main.c -o main.o \
 	-fdollars-in-identifiers -fextended-identifiers \
 	-fno-exceptions -fno-function-cse -Wl,--gc-sections -ffast-math -fomit-frame-pointer -fwhole-program \
