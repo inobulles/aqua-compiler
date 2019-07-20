@@ -1,0 +1,11 @@
+rom.zed
+code
+lib
+
+langs/asm/a.out
+langs/asm/code.asm
+
+langs/c/src
+langs/c/objconv
+langs/c/objconv-src
+langs/c/main.o
