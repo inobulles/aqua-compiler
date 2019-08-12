@@ -44,9 +44,10 @@ class amber_compiler:
 	
 	class variable:
 		UNKNOWN = 0
+		FUNCTION = 1
 		
-		INT = 1
-		UINT = 2
+		INT = 2
+		UINT = 3
 		
 		type = UNKNOWN
 		name = ""
@@ -65,6 +66,7 @@ class amber_compiler:
 	data_section = ""
 	stack_pointer = 0
 	statement_count = 0
+	function_count = 0
 	variables = []
 	
 	def __init__(self, code):
@@ -102,7 +104,7 @@ class amber_compiler:
 			elif white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
-						if   self.tokens[-1].content in ["if", "elif", "else"]: self.tokens[-1].type = self.token.STATEMENT
+						if   self.tokens[-1].content in ["if", "func", "return"]: self.tokens[-1].type = self.token.STATEMENT
 						elif self.tokens[-1].content in ["int", "uint"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
@@ -201,11 +203,7 @@ class amber_compiler:
 				write_code = self.compile_token(peice, write_code)
 		
 		elif current.type == self.token.EXPRESSION:
-			if len(current.tokens) == 1:
-				write_code = self.compile_token(current.tokens[0], write_code)
-				current.copy_reference(current.tokens[0])
-			
-			elif len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE:
+			if len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE:
 				variable = self.variable(current.tokens[1].content, self.stack_pointer)
 				self.stack_pointer += 8
 				
@@ -221,19 +219,34 @@ class amber_compiler:
 				
 				self.variables.append(variable)
 			
-			elif len(current.tokens) >= 2 and current.tokens[0].type == self.token.STATEMENT:
-				has_condition = current.tokens[1].type == self.token.EXPRESSION
-				
-				if has_condition:
+			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT:
+				if current.tokens[0].content == "if":
 					write_code = self.compile_token(current.tokens[1], write_code)
+					
+					label = "?_amber_s%d" % self.statement_count
+					self.statement_count += 1
+					write_code = write_code + "cmp %s 1\ncnd z\ncall %s\n" % (current.tokens[1].reference(), label)
+					
+					code = "%s:\n" % label
+					code = self.compile_token(current.tokens[2], code)
+					write_code = code + "ret\n" + write_code
 				
-				label = "?_amber_s%d" % self.statement_count
-				self.statement_count += 1
-				write_code = write_code + "cmp %s 1\ncnd z\ncall %s\n" % (current.tokens[1].reference(), label)
+				elif current.tokens[0].content == "func":
+					variable = self.variable(current.tokens[1].content, self.stack_pointer, self.variable.FUNCTION)
+					self.variables.append(variable)
+					self.stack_pointer += 8
+					
+					label = "?_amber_f%d" % self.function_count
+					self.function_count += 1
+					write_code = write_code + "mov [rsp-%d] %s\n" % (variable.stack_pointer, label)
+					
+					code = "%s:\n" % label
+					code = self.compile_token(current.tokens[2], code)
+					write_code = code + "ret\n" + write_code
 				
-				code = "%s:\n" % label
-				code = self.compile_token(current.tokens[has_condition + 1], code)
-				write_code = code + "ret\n" + write_code
+				elif current.tokens[0].content == "return":
+					if len(current.tokens) >= 2: write_code = self.compile_token(current.tokens[1], write_code) + "mov rax %s\nret\n" % current.tokens[1].reference()
+					else: write_code = write_code + "mov rax 0\nret\n"
 			
 			elif len(current.tokens) >= 3 and not len(current.tokens) % 1:
 				first_operator = current.tokens[1]
@@ -291,6 +304,10 @@ class amber_compiler:
 					
 					write_code = write_code + "mov %s rax\n" % current.reference()
 					self.stack_pointer += 8
+			
+			elif len(current.tokens) == 1:
+				write_code = self.compile_token(current.tokens[0], write_code)
+				current.copy_reference(current.tokens[0])
 		
 		elif current.type == self.token.NUMBER and current.stack_pointer < 0:
 			current.stack_pointer = self.stack_pointer
