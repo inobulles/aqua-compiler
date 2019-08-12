@@ -21,6 +21,7 @@ class amber_compiler:
 		END_ARGUMENT = 12
 		STATEMENT = 13
 		BLOCK = 14
+		TYPE = 15
 		
 		type = UNKNOWN
 		content = ""
@@ -41,6 +42,21 @@ class amber_compiler:
 			self.stack_pointer = source.stack_pointer
 			self.label_pointer = source.label_pointer
 	
+	class variable:
+		UNKNOWN = 0
+		
+		INT = 1
+		UINT = 2
+		
+		type = UNKNOWN
+		name = ""
+		stack_pointer = -1
+		
+		def __init__(self, name = "", stack_pointer = -1, type = UNKNOWN):
+			self.name = name
+			self.type = type
+			self.stack_pointer = stack_pointer
+	
 	code = ""
 	tokens = []
 	tree = token()
@@ -49,6 +65,7 @@ class amber_compiler:
 	data_section = ""
 	stack_pointer = 0
 	statement_count = 0
+	variables = []
 	
 	def __init__(self, code):
 		self.code = code
@@ -85,7 +102,8 @@ class amber_compiler:
 			elif white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
-						if self.tokens[-1].content in ["if", "elif", "else"]: self.tokens[-1].type = self.token.STATEMENT
+						if   self.tokens[-1].content in ["if", "elif", "else"]: self.tokens[-1].type = self.token.STATEMENT
+						elif self.tokens[-1].content in ["int", "uint"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
 				
@@ -150,7 +168,16 @@ class amber_compiler:
 	
 	def compile_token(self, current, write_code = text_section):
 		if current.type == self.token.UNKNOWN:
-			current.label_pointer = current.content
+			variable_found = False
+			
+			for variable in self.variables:
+				if current.content == variable.name:
+					variable_found = True
+					current.stack_pointer = variable.stack_pointer
+					break
+			
+			if not variable_found:
+				current.label_pointer = current.content
 		
 		elif current.type == self.token.STRING:
 			current.label_pointer = self.add_data(current.content)
@@ -177,6 +204,22 @@ class amber_compiler:
 			if len(current.tokens) == 1:
 				write_code = self.compile_token(current.tokens[0], write_code)
 				current.copy_reference(current.tokens[0])
+			
+			elif len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE:
+				variable = self.variable(current.tokens[1].content, self.stack_pointer)
+				self.stack_pointer += 8
+				
+				if current.tokens[0].content == "int": variable.type = self.variable.INT
+				if current.tokens[0].content == "uint": variable.type = self.variable.UINT
+				
+				if len(current.tokens) >= 3 and current.tokens[2].type == self.token.OPERATOR and current.tokens[2].content == "=":
+					write_code = self.compile_token(current.tokens[3], write_code)
+					write_code = write_code + "mov [rsp-%d] %s\n" % (variable.stack_pointer, current.tokens[3].reference())
+				
+				else:
+					write_code = write_code + "mov [rsp-%d] 0\n" % (variable.stack_pointer)
+				
+				self.variables.append(variable)
 			
 			elif len(current.tokens) >= 2 and current.tokens[0].type == self.token.STATEMENT:
 				has_condition = current.tokens[1].type == self.token.EXPRESSION
