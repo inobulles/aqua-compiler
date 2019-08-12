@@ -37,6 +37,14 @@ if [ "$code" = "asm" ]; then
 	cd langs/asm
 	sh build.sh
 	cd ../..
+elif [ "$code" = "amber" ]; then
+	echo "Compiling Amber code ..."
+	rm -rf langs/amber/src
+	mkdir -p langs/amber/src
+	cp -r code/* langs/amber/src
+	cd langs/amber
+	sh build.sh
+	cd ../..
 elif [ "$code" = "c" ]; then
 	echo "Compiling C code ... "
 	rm -rf langs/c/src

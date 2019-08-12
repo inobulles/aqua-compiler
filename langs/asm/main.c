@@ -862,7 +862,7 @@ var main(void) {
 							
 						}
 						
-					} else if (e(".rodata")||e(".data")||e(".bss")) {
+					} else if (e(".rodata")||e(".data")||e("data")||e(".bss")) {
 						if (done_data) {
 							break;
 							
