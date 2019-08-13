@@ -51,7 +51,9 @@ class amber_compiler:
 		
 		type = UNKNOWN
 		name = ""
+		
 		stack_pointer = -1
+		label_pointer = ""
 		
 		def __init__(self, name = "", stack_pointer = -1, type = UNKNOWN):
 			self.name = name
@@ -166,7 +168,7 @@ class amber_compiler:
 		if not bytes in self.data:
 			self.data.append(bytes)
 		
-		return "?_amber_d%d" % self.data.index(bytes)
+		return "?_amber_data_%d" % self.data.index(bytes)
 	
 	def compile_token(self, current, write_code = text_section):
 		if current.type == self.token.UNKNOWN:
@@ -191,11 +193,17 @@ class amber_compiler:
 				write_code = self.compile_branch(argument, write_code)
 			
 			argument_registers = ["rdi", "rsi", "rdx", "rcx"]
-			for i in range(len(current.tokens)):
-				write_code = write_code + "mov %s %s\n" % (argument_registers[i], current.tokens[i].reference())
+			for i in range(len(current.tokens[0].tokens)):
+				write_code = write_code + "mov %s %s\n" % (argument_registers[i], current.tokens[0].tokens[i].reference())
+			
+			label_pointer = current.call_token.reference()
+			for variable in self.variables:
+				if current.call_token.stack_pointer == variable.stack_pointer:
+					label_pointer = variable.label_pointer
+					break
 			
 			current.stack_pointer = self.stack_pointer
-			write_code = write_code + "call %s\nmov %s rax\n" % (current.call_token.reference(), current.reference())
+			write_code = write_code + "call %s ; FIXME this comment is needed for some reason\nmov %s rax\n" % (label_pointer, current.reference())
 			self.stack_pointer += 8
 		
 		elif current.type == self.token.BLOCK:
@@ -223,7 +231,7 @@ class amber_compiler:
 				if current.tokens[0].content == "if":
 					write_code = self.compile_token(current.tokens[1], write_code)
 					
-					label = "?_amber_s%d" % self.statement_count
+					label = "?_amber_statement_%d" % self.statement_count
 					self.statement_count += 1
 					write_code = write_code + "cmp %s 1\ncnd z\ncall %s\n" % (current.tokens[1].reference(), label)
 					
@@ -236,13 +244,14 @@ class amber_compiler:
 					self.variables.append(variable)
 					self.stack_pointer += 8
 					
-					label = "?_amber_f%d" % self.function_count
+					label = "?_amber_function_%d" % self.function_count
+					variable.label_pointer = label
 					self.function_count += 1
 					write_code = write_code + "mov [rsp-%d] %s\n" % (variable.stack_pointer, label)
 					
 					code = "%s:\n" % label
 					code = self.compile_token(current.tokens[2], code)
-					write_code = code + "ret\n" + write_code
+					write_code = code + "mov rax 0\nret\n" + write_code
 				
 				elif current.tokens[0].content == "return":
 					if len(current.tokens) >= 2: write_code = self.compile_token(current.tokens[1], write_code) + "mov rax %s\nret\n" % current.tokens[1].reference()
@@ -330,7 +339,7 @@ class amber_compiler:
 	
 	def compile_data(self, data):
 		for i in range(len(self.data)):
-			self.data_section = self.data_section + "?_amber_d%d: db" % i
+			self.data_section = self.data_section + "?_amber_data_%d: db" % i
 			
 			for byte in self.data[i]:
 				self.data_section = self.data_section + " %xH" % ord(byte)
@@ -363,7 +372,16 @@ class amber_compiler:
 		self.compile_data(self.data)
 		print self.data_section
 		
-		return "section text align=1 execute\n" + self.text_section + "section data align=1\n" + self.data_section
+		return """SECTION .text   align=1 execute                         ; section number 1, code
+""" + self.text_section + """
+SECTION .data   align=1 noexecute                       ; section number 2, data
+
+
+SECTION .bss    align=1 noexecute                       ; section number 3, bss
+
+
+SECTION .rodata align=16 noexecute                      ; section number 4, const
+""" + self.data_section
 
 f = open("src/main.a")
 code = f.read()
