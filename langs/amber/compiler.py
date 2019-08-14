@@ -76,11 +76,12 @@ class amber_compiler:
 	tokens = []
 	tree = token()
 	data = []
-	text_section = FUNCTION_ENTER_FORMAT % "main" + "mov rbp rsp ; WTF\nsub rbp 1024 ; WTF\n"
+	text_section = "?_amber_main: ; WTF\n"
 	data_section = ""
 	stack_pointer = 0
 	statement_count = 0
 	function_count = 0
+	inline_count = 0
 	variables = []
 	depth = 0
 	
@@ -133,7 +134,7 @@ class amber_compiler:
 			if white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
-						if   self.tokens[-1].content in ["if", "func", "class", "return"]: self.tokens[-1].type = self.token.STATEMENT
+						if   self.tokens[-1].content in ["if", "func", "class", "return", "while", "break"]: self.tokens[-1].type = self.token.STATEMENT
 						elif self.tokens[-1].content in ["int", "uint", "ftype"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
@@ -280,6 +281,13 @@ class amber_compiler:
 					code = self.FUNCTION_ENTER_FORMAT % label
 					code = self.compile_token(current.tokens[2], code)
 					write_code = code + self.FUNCTION_LEAVE_FORMAT + write_code
+				
+				elif current.tokens[0].content == "while": # while statement
+					write_code = write_code + "jmp ?_amber_inline_%d_condition ; WTF\n?_amber_inline_%d: ; WTF\n" % (self.inline_count, self.inline_count)
+					write_code = self.compile_token(current.tokens[2], write_code)
+					write_code = write_code + "?_amber_inline_%d_condition: ; WTF\n" % self.inline_count
+					write_code = self.compile_token(current.tokens[1], write_code) + "cmp %s 0 ; WTF\ncnd 1 ; WTF\njmp ?_amber_inline_%d ; WTF\n" % (current.tokens[1].reference(), self.inline_count)
+					self.inline_count += 1
 				
 				elif current.tokens[0].content == "func": # function statement
 					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
@@ -445,7 +453,7 @@ class amber_compiler:
 		print self.data_section
 		
 		return """SECTION .text   align=1 execute                         ; section number 1, code
-""" + self.text_section + """SECTION .data   align=1 noexecute                       ; section number 2, data
+""" + self.text_section + "main: ; WTF\nmov rbp rsp ; WTF\nsub rbp 1024 ; WTF\njmp ?_amber_main ; WTF\n" + """SECTION .data   align=1 noexecute                       ; section number 2, data
 
 
 SECTION .bss    align=1 noexecute                       ; section number 3, bss

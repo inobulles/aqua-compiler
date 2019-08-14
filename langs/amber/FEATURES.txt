@@ -13,6 +13,14 @@ Debated features which may not implemented as stated or even implmented at all a
 + Preprocessor for stuff like #alias
 + Automatic and manual memory managers, with their own special syntax and all
 
+=== ATTRIBUTES ===
+
++ freeze
++ debug
++ auto, manual
++ implicit, explicit
+* cold, mild, hot
+
 === STATEMENTS ===
 
 - if
