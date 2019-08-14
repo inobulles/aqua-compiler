@@ -51,11 +51,13 @@ class amber_compiler:
 		
 		type = UNKNOWN
 		name = ""
+		depth = 0
 		
 		stack_pointer = -1
 		label_pointer = ""
 		
-		def __init__(self, name = "", stack_pointer = -1, type = UNKNOWN):
+		def __init__(self, depth = 0, name = "", stack_pointer = -1, type = UNKNOWN):
+			self.depth = depth
 			self.name = name
 			self.type = type
 			self.stack_pointer = stack_pointer
@@ -80,6 +82,7 @@ class amber_compiler:
 	statement_count = 0
 	function_count = 0
 	variables = []
+	depth = 0
 	
 	def __init__(self, code):
 		self.code = code
@@ -105,7 +108,7 @@ class amber_compiler:
 				self.tokens.append(self.token())
 				self.tokens[-1].type = self.token.OPERATOR
 				add_current = True
-			elif ord(current) >= ord('0') and ord(current) <= ord('9'):
+			elif not len(self.tokens[-1].content) and ord(current) >= ord('0') and ord(current) <= ord('9'):
 				self.tokens[-1].type = self.token.NUMBER
 				add_current = True
 			elif current == '"':
@@ -227,12 +230,24 @@ class amber_compiler:
 			self.stack_pointer += 8
 		
 		elif current.type == self.token.BLOCK:
+			self.depth += 1
+			
 			for peice in current.tokens:
 				write_code = self.compile_token(peice, write_code)
+			
+			length = len(self.variables)
+			for i in reversed(range(length)):
+				if self.variables[i].depth < self.depth:
+					break
+				
+				else:
+					self.variables.pop(i)
+			
+			self.depth -= 1
 		
 		elif current.type == self.token.EXPRESSION:
 			if len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE:
-				variable = self.variable(current.tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[0].content))
+				variable = self.variable(self.depth, current.tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[0].content))
 				self.stack_pointer += 8
 				
 				if len(current.tokens) >= 3 and current.tokens[2].type == self.token.OPERATOR and current.tokens[2].content == "=":
@@ -260,7 +275,7 @@ class amber_compiler:
 					write_code = code + self.FUNCTION_LEAVE_FORMAT + write_code
 				
 				elif current.tokens[0].content == "func":
-					variable = self.variable(current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
+					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
 					self.variables.append(variable)
 					self.stack_pointer += 8
 					
@@ -271,12 +286,16 @@ class amber_compiler:
 					
 					code = self.FUNCTION_ENTER_FORMAT % label
 					for i in range(len(current.tokens[1].tokens)):
-						variable = self.variable(current.tokens[1].tokens[i].tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[1].tokens[i].tokens[0].content))
-						self.variables.append(variable)
-						self.stack_pointer += 8
-						code = code + "mov [rbp-%d] %s ; WTF\n" % (variable.stack_pointer, self.ARGUMENT_REGISTERS[i])
+						if len(current.tokens[1].tokens[i].tokens):
+							argument_variable = self.variable(self.depth, current.tokens[1].tokens[i].tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[1].tokens[i].tokens[0].content))
+							self.variables.append(argument_variable)
+							self.stack_pointer += 8
+							code = code + "mov [rbp-%d] %s ; WTF\n" % (argument_variable.stack_pointer, self.ARGUMENT_REGISTERS[i])
 					
-					code = self.compile_token(current.tokens[2], code)
+					extension_token = self.token(self.token.EXPRESSION)
+					extension_token.tokens = current.tokens[2: len(current.tokens)]
+					
+					code = self.compile_token(extension_token, code)
 					write_code = code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT + write_code
 				
 				elif current.tokens[0].content == "class":
