@@ -97,15 +97,19 @@ class amber_compiler:
 					parsing_string = False
 					white = True
 				else: add_current = True
-			elif current in "  ; WTF\n\t;,{}()":
+			elif current in " \n\t;,{}()":
 				white = True
-			elif current in "+-*/%=<>!.^&~|":
+				print(current)
+			elif current in "+-*/%=<>!.^&~|?":
+				white = True
+				self.tokens.append(self.token())
 				self.tokens[-1].type = self.token.OPERATOR
 				add_current = True
 			elif ord(current) >= ord('0') and ord(current) <= ord('9'):
 				self.tokens[-1].type = self.token.NUMBER
 				add_current = True
 			elif current == '"':
+				self.tokens.append(self.token())
 				parsing_string = True
 				self.tokens[-1].type = self.token.STRING
 			else:
@@ -113,7 +117,7 @@ class amber_compiler:
 			
 			if add_current:
 				self.tokens[-1].content = self.tokens[-1].content + current
-			elif white:
+			if white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
 						if   self.tokens[-1].content in ["if", "func", "class", "return"]: self.tokens[-1].type = self.token.STATEMENT
@@ -121,6 +125,7 @@ class amber_compiler:
 					
 					self.tokens.append(self.token())
 				
+				white_token = True
 				if current == '(':
 					if len(self.tokens) >= 2 and not self.tokens[-2].type in [self.token.OPEN_PARENTHESES, self.token.OPERATOR, self.token.STATEMENT]: # function call
 						self.tokens[-1].type = self.token.FUNCTION_CALL
@@ -135,6 +140,15 @@ class amber_compiler:
 				
 				elif current == '{': self.tokens[-1].type = self.token.OPEN_BRACES
 				elif current == '}': self.tokens[-1].type = self.token.CLOSE_BRACES
+				
+				else: white_token = False
+				if white_token:
+					self.tokens.append(self.token())
+		
+		length = len(self.tokens)
+		for i in reversed(range(length)):
+			if self.tokens[i].type == self.token.UNKNOWN and not self.tokens[i].content:
+				self.tokens.pop(i)
 	
 	def build_tree(self, tokens):
 		self.tree.tokens.append(self.token(self.token.EXPRESSION))
@@ -388,18 +402,18 @@ class amber_compiler:
 	
 	def compile(self):
 		self.lex(self.code)
-		print " ; WTF\n=== RAW TOKENS === ; WTF\n"
+		print "\n=== RAW TOKENS ===\n"
 		self.print_tokens(self.tokens)
 		
 		self.build_tree(self.tokens)
-		print " ; WTF\n=== ABSTRACT SYNTAX TREE === ; WTF\n"
+		print "\n=== ABSTRACT SYNTAX TREE ===\n"
 		self.print_tree(self.tree)
 		
-		print " ; WTF\n=== TEXT SECTION === ; WTF\n"
+		print "\n=== TEXT SECTION ===\n"
 		self.text_section = self.compile_branch(self.tree)
 		print self.text_section
 		
-		print " ; WTF\n=== DATA SECTION === ; WTF\n"
+		print "\n=== DATA SECTION ===\n"
 		self.compile_data(self.data)
 		print self.data_section
 		
