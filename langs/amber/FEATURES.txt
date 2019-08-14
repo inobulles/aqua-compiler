@@ -1,0 +1,76 @@
+
+AMBER PROGRAMMING LANGUAGE FEATURES LIST
+
+Features already implemented are marked with a -
+Features awaiting implementation are marked with a +
+Debated features which may not implemented as stated or even implmented at all are marked with a *
+
+=== GENERAL SYNTAX ===
+
+- C-like flexible lexer
+- Abstract Syntax Tree generator that subdivides all statements into nested expressions and blocks and respects stuff like operator precedence
++ Comments
++ Preprocessor for stuff like #alias
++ Automatic and manual memory managers, with their own special syntax and all
+
+=== STATEMENTS ===
+
+- if
++ elif (else if) and else
+* always (I really like this, but I doubt people would take it very seriously lol. Anyways, I'm also torn on the name. Maybe simply "loop" is a better name?)
+* iterate (used to use this, but even I'm doubting its use, so I don't this this will ever happen)
++ while
++ continue
++ break
+* break(n) (breaking multiple loops with a single statement, may make the loops compiler too complex)
+* switc... haha no I'm just kidding, I will *try* to never touch one of those ugly bastards ever again
+* do ... while (seriously, what's the point? I'll add it if people want it, but I don't see the point)
+* for (I'm not sure what the best way of implementing these should be. I honestly can't find any other reason to have this in Amber apart from if it's some kind of for ... in ... loop)
+- func (functions)
++ class (name spaces)
+- return
+* goto (goto gets too much hate, and I personally love it, but I'm not sure how to make good looking labels)
+- declarations
+
+=== OPERATIONS ===
+
+* Casts to different types (<type name>(<thing to be cast>), such as int("9") == 9)
+- Integer addition (+), subtraction (-), multiplication (*), division (/)
++ Integer modulo (%)
++ Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
++ Logical and (&&, and), or (||, or)
++ Logical not (!, not)
+* Logical xor (^^, xor)
++ Unary minus (-)
+* Unary plus (+)
+* Pointer reference (&) and dereference (*) (could use some different operators, such as ? and :)
++ Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>), two's complement (~)
+* Integer increment (++) and decrement (--)
++ String concatenation (++) and string formatting (%%)
++ String equivalency (===) and non-equivalency (!==) conditions
+* String multiplication (**)
+- Assignment (=)
+- Self-assignment with all currently implemented operations (<operator>=)
+
+=== TYPES ===
+
+- int
+- uint
+- ftype (function type)
++ * (pointers, can be just ints for now, but will have to be a fully-fledged system for dereference and reference operations)
++ str
++ flt
++ bool
++ char (single byte variables)
++ uchar
++ [] (lists)
++ class (data structures)
+
+=== LITERALS ===
+
+- String literals
+- Decimal interger literals
++ Floating point literals
++ Array literals
++ Hexadecimal and binary integer literals
++ Single or multi-char literals
