@@ -60,8 +60,15 @@ class amber_compiler:
 			self.type = type
 			self.stack_pointer = stack_pointer
 	
+	def get_type_from_token(self, string):
+		if string == "ftype": return self.variable.FUNCTION
+		elif string == "int": return self.variable.INT
+		elif string == "uint": return self.variable.UINT
+		else: return self.variable.UNKNOWN
+	
 	FUNCTION_ENTER_FORMAT = "%s: ; WTF\n"
 	FUNCTION_LEAVE_FORMAT = "ret ; WTF\n"
+	ARGUMENT_REGISTERS = ["rdi", "rsi", "rdx", "rcx"]
 	
 	code = ""
 	tokens = []
@@ -110,7 +117,7 @@ class amber_compiler:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
 						if   self.tokens[-1].content in ["if", "func", "class", "return"]: self.tokens[-1].type = self.token.STATEMENT
-						elif self.tokens[-1].content in ["int", "uint"]: self.tokens[-1].type = self.token.TYPE
+						elif self.tokens[-1].content in ["int", "uint", "ftype"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
 				
@@ -195,12 +202,11 @@ class amber_compiler:
 			for argument in current.tokens:
 				write_code = self.compile_branch(argument, write_code)
 			
-			argument_registers = ["rdi", "rsi", "rdx", "rcx"]
 			for i in range(len(current.tokens)):
 				reference = current.tokens[i].reference()
 				
 				if reference:
-					write_code = write_code + "mov %s %s ; WTF\n" % (argument_registers[i], reference)
+					write_code = write_code + "mov %s %s ; WTF\n" % (self.ARGUMENT_REGISTERS[i], reference)
 			
 			current.stack_pointer = self.stack_pointer
 			write_code = write_code + "call %s ; FIXME this comment is needed for some reason ; WTF\nmov %s rax ; WTF\n" % (current.call_token.reference(), current.reference())
@@ -212,15 +218,15 @@ class amber_compiler:
 		
 		elif current.type == self.token.EXPRESSION:
 			if len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE:
-				variable = self.variable(current.tokens[1].content, self.stack_pointer)
+				variable = self.variable(current.tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[0].content))
 				self.stack_pointer += 8
 				
-				if current.tokens[0].content == "int": variable.type = self.variable.INT
-				if current.tokens[0].content == "uint": variable.type = self.variable.UINT
-				
 				if len(current.tokens) >= 3 and current.tokens[2].type == self.token.OPERATOR and current.tokens[2].content == "=":
-					write_code = self.compile_token(current.tokens[3], write_code)
-					write_code = write_code + "mov rcx %s ; WTF\nmov [rbp-%d] rcx ; WTF\n" % (current.tokens[3].reference(), variable.stack_pointer)
+					extension_token = self.token(self.token.EXPRESSION)
+					extension_token.tokens = current.tokens[3: len(current.tokens)]
+					
+					write_code = self.compile_token(extension_token, write_code)
+					write_code = write_code + "mov rcx %s ; WTF\nmov [rbp-%d] rcx ; WTF\n" % (extension_token.reference(), variable.stack_pointer)
 				
 				else:
 					write_code = write_code + "mov [rbp-%d] 0 ; WTF\n" % (variable.stack_pointer)
@@ -240,7 +246,7 @@ class amber_compiler:
 					write_code = code + self.FUNCTION_LEAVE_FORMAT + write_code
 				
 				elif current.tokens[0].content == "func":
-					variable = self.variable(current.tokens[1].content, self.stack_pointer, self.variable.FUNCTION)
+					variable = self.variable(current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
 					self.variables.append(variable)
 					self.stack_pointer += 8
 					
@@ -250,6 +256,12 @@ class amber_compiler:
 					write_code = write_code + "mov [rbp-%d] %s ; maybe? ; WTF\n" % (variable.stack_pointer, label)
 					
 					code = self.FUNCTION_ENTER_FORMAT % label
+					for i in range(len(current.tokens[1].tokens)):
+						variable = self.variable(current.tokens[1].tokens[i].tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[1].tokens[i].tokens[0].content))
+						self.variables.append(variable)
+						self.stack_pointer += 8
+						code = code + "mov [rbp-%d] %s ; WTF\n" % (variable.stack_pointer, self.ARGUMENT_REGISTERS[i])
+					
 					code = self.compile_token(current.tokens[2], code)
 					write_code = code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT + write_code
 				
@@ -260,8 +272,13 @@ class amber_compiler:
 						print "type = %s, name = %s, set = %d" % (member.tokens[0].content, member.tokens[1].content, len(member.tokens))
 				
 				elif current.tokens[0].content == "return":
-					if len(current.tokens) >= 2: write_code = self.compile_token(current.tokens[1], write_code) + "mov rax %s ; WTF\n" % current.tokens[1].reference() + self.FUNCTION_LEAVE_FORMAT
-					else: write_code = write_code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT
+					if len(current.tokens) >= 2:
+						extension_token = self.token(self.token.EXPRESSION)
+						extension_token.tokens = current.tokens[1: len(current.tokens)]
+						write_code = self.compile_token(extension_token, write_code) + "mov rax %s ; WTF\n" % extension_token.reference() + self.FUNCTION_LEAVE_FORMAT
+					
+					else:
+						write_code = write_code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT
 			
 			elif len(current.tokens) >= 3 and not len(current.tokens) % 1:
 				first_operator = current.tokens[1]
