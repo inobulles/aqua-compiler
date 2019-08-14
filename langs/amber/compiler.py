@@ -88,12 +88,15 @@ class amber_compiler:
 		self.code = code
 	
 	def lex(self, code): # lexer
-		parsing_string = False
 		self.tokens.append(self.token())
+		
+		parsing_operator = False
+		parsing_string = False
 		
 		for current in code:
 			white = False
 			add_current = False
+			was_operator = False
 			
 			if parsing_string:
 				if current == '"':
@@ -104,8 +107,10 @@ class amber_compiler:
 				white = True
 				print(current)
 			elif current in "+-*/%=<>!.^&~|?":
-				white = True
-				self.tokens.append(self.token())
+				if not parsing_operator:
+					self.tokens.append(self.token())
+				
+				was_operator = True
 				self.tokens[-1].type = self.token.OPERATOR
 				add_current = True
 			elif not len(self.tokens[-1].content) and ord(current) >= ord('0') and ord(current) <= ord('9'):
@@ -117,6 +122,11 @@ class amber_compiler:
 				self.tokens[-1].type = self.token.STRING
 			else:
 				add_current = True
+			
+			if parsing_operator and not was_operator:
+				self.tokens.append(self.token())
+			
+			parsing_operator = was_operator
 			
 			if add_current:
 				self.tokens[-1].content = self.tokens[-1].content + current
@@ -326,7 +336,7 @@ class amber_compiler:
 						elif operator.content[-1] == "=":         return 14 # assignment
 						
 						elif operator.content == "":              return 17
-						else                                      return 16
+						else:                                     return 16
 					
 					old_index = -1
 					
@@ -353,7 +363,7 @@ class amber_compiler:
 						if operator.content == "\0":
 							continue
 						
-						instruction = "nop"
+						instruction = "mov"
 						
 						if   operator.content[0] == "+": instruction = "add"
 						elif operator.content[0] == "*": instruction = "mul"
@@ -361,10 +371,8 @@ class amber_compiler:
 						elif operator.content[0] == "%": instruction = "mod"
 						elif operator.content[0] == "-": instruction = "sub"
 						
-						if operator.content == "=":
-							write_code = write_code + "mov rax %s ; WTF\nmov %s rax ; WTF\n" % (current.tokens[min_index + 1].reference(), current.tokens[min_index - 1].reference())
-						
-						elif operator.content == 
+						if operator.content[-1] == "=":
+							write_code = write_code + "mov rax %s ; WTF\n%s %s rax ; WTF\n" % (current.tokens[min_index + 1].reference(), instruction, current.tokens[min_index - 1].reference())
 						
 						else:
 							if not i:
