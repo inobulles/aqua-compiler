@@ -87,7 +87,7 @@ class amber_compiler:
 	def __init__(self, code):
 		self.code = code
 	
-	def lex(self, code):
+	def lex(self, code): # lexer
 		parsing_string = False
 		self.tokens.append(self.token())
 		
@@ -153,7 +153,7 @@ class amber_compiler:
 			if self.tokens[i].type == self.token.UNKNOWN and not self.tokens[i].content:
 				self.tokens.pop(i)
 	
-	def build_tree(self, tokens):
+	def build_tree(self, tokens): # AST generator
 		self.tree.tokens.append(self.token(self.token.EXPRESSION))
 		branch_stack = [self.tree, self.tree.tokens[-1]]
 		
@@ -197,8 +197,8 @@ class amber_compiler:
 		
 		return "?_amber_data_%d" % self.data.index(bytes)
 	
-	def compile_token(self, current, write_code = text_section):
-		if current.type == self.token.UNKNOWN:
+	def compile_token(self, current, write_code = text_section): # compile a single token
+		if current.type == self.token.UNKNOWN: # variable, function names, or other user-named stuff
 			variable_found = False
 			
 			for variable in self.variables:
@@ -210,10 +210,10 @@ class amber_compiler:
 			if not variable_found:
 				current.label_pointer = current.content
 		
-		elif current.type == self.token.STRING:
+		elif current.type == self.token.STRING: # string literals
 			current.label_pointer = self.add_data(current.content)
 		
-		elif current.type == self.token.FUNCTION_CALL:
+		elif current.type == self.token.FUNCTION_CALL: # function calls
 			write_code = self.compile_token(current.call_token, write_code)
 			
 			for argument in current.tokens:
@@ -229,7 +229,7 @@ class amber_compiler:
 			write_code = write_code + "call %s ; FIXME this comment is needed for some reason ; WTF\nmov %s rax ; WTF\n" % (current.call_token.reference(), current.reference())
 			self.stack_pointer += 8
 		
-		elif current.type == self.token.BLOCK:
+		elif current.type == self.token.BLOCK: # blocks
 			self.depth += 1
 			
 			for peice in current.tokens:
@@ -237,16 +237,13 @@ class amber_compiler:
 			
 			length = len(self.variables)
 			for i in reversed(range(length)):
-				if self.variables[i].depth < self.depth:
-					break
-				
-				else:
-					self.variables.pop(i)
+				if self.variables[i].depth < self.depth: break
+				else: self.variables.pop(i)
 			
 			self.depth -= 1
 		
-		elif current.type == self.token.EXPRESSION:
-			if len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE:
+		elif current.type == self.token.EXPRESSION: # expressions
+			if len(current.tokens) >= 2 and current.tokens[0].type == self.token.TYPE: # declarations
 				variable = self.variable(self.depth, current.tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[0].content))
 				self.stack_pointer += 8
 				
@@ -262,8 +259,8 @@ class amber_compiler:
 				
 				self.variables.append(variable)
 			
-			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT:
-				if current.tokens[0].content == "if":
+			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT: # statments
+				if current.tokens[0].content == "if": # if statement
 					write_code = self.compile_token(current.tokens[1], write_code)
 					
 					label = "?_amber_statement_%d" % self.statement_count
@@ -274,7 +271,7 @@ class amber_compiler:
 					code = self.compile_token(current.tokens[2], code)
 					write_code = code + self.FUNCTION_LEAVE_FORMAT + write_code
 				
-				elif current.tokens[0].content == "func":
+				elif current.tokens[0].content == "func": # function statement
 					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
 					self.variables.append(variable)
 					self.stack_pointer += 8
@@ -298,13 +295,13 @@ class amber_compiler:
 					code = self.compile_token(extension_token, code)
 					write_code = code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT + write_code
 				
-				elif current.tokens[0].content == "class":
+				elif current.tokens[0].content == "class": # class statement
 					name = current.tokens[1].content
 					
 					for member in current.tokens[2].tokens[0: -1]:
 						print "type = %s, name = %s, set = %d" % (member.tokens[0].content, member.tokens[1].content, len(member.tokens))
 				
-				elif current.tokens[0].content == "return":
+				elif current.tokens[0].content == "return": # return statement
 					if len(current.tokens) >= 2:
 						extension_token = self.token(self.token.EXPRESSION)
 						extension_token.tokens = current.tokens[1: len(current.tokens)]
@@ -313,7 +310,7 @@ class amber_compiler:
 					else:
 						write_code = write_code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT
 			
-			elif len(current.tokens) >= 3 and not len(current.tokens) % 1:
+			elif len(current.tokens) >= 3 and not len(current.tokens) % 1: # operations and chains of arithmetic with expressions
 				first_operator = current.tokens[1]
 				
 				if first_operator.type == self.token.OPERATOR:
@@ -323,12 +320,13 @@ class amber_compiler:
 					current.stack_pointer = self.stack_pointer
 					
 					def get_operator_token_precedence(operator):
-						if operator.content in "*/%": return 3
-						elif operator.content in "+-":  return 4
-						elif operator.content == "=": return 5
-						elif operator.content == "":    return 17
+						if   operator.content in ["*", "/", "%"]: return 3  # mul/div/mod
+						elif operator.content in ["+", "-"]:      return 4  # add/sub
+						elif operator.content in ["%%", "++"]:    return 5  # string operations
+						elif operator.content[-1] == "=":         return 14 # assignment
 						
-						return 16
+						elif operator.content == "":              return 17
+						else                                      return 16
 					
 					old_index = -1
 					
@@ -357,39 +355,41 @@ class amber_compiler:
 						
 						instruction = "nop"
 						
-						if   operator.content == "+": instruction = "add"
-						elif operator.content == "*": instruction = "mul"
-						elif operator.content == "/": instruction = "div"
-						elif operator.content == "%": instruction = "mod"
-						elif operator.content == "-": instruction = "sub"
+						if   operator.content[0] == "+": instruction = "add"
+						elif operator.content[0] == "*": instruction = "mul"
+						elif operator.content[0] == "/": instruction = "div"
+						elif operator.content[0] == "%": instruction = "mod"
+						elif operator.content[0] == "-": instruction = "sub"
 						
-						elif operator.content == "=":
+						if operator.content == "=":
 							write_code = write_code + "mov rax %s ; WTF\nmov %s rax ; WTF\n" % (current.tokens[min_index + 1].reference(), current.tokens[min_index - 1].reference())
 						
-						operator.content = "\0"
+						elif operator.content == 
 						
-						if instruction != "nop":
+						else:
 							if not i:
 								write_code = write_code + "mov rax %s ; WTF\n" % current.tokens[min_index - 1].reference()
 							
 							if went_left: write_code = write_code + "mov rbx rax ; WTF\nmov rax %s ; WTF\n%s rax rbx ; WTF\n" % (current.tokens[min_index - 1].reference(), instruction)
 							else:         write_code = write_code + "%s rax %s ; WTF\n" % (instruction, current.tokens[min_index + 1].reference())
+						
+						operator.content = "\0"
 					
 					write_code = write_code + "mov %s rax ; WTF\n" % current.reference()
 					self.stack_pointer += 8
 			
-			elif len(current.tokens) == 1:
+			elif len(current.tokens) == 1: # nested expressions
 				write_code = self.compile_token(current.tokens[0], write_code)
 				current.copy_reference(current.tokens[0])
 		
-		elif current.type == self.token.NUMBER and current.stack_pointer < 0:
+		elif current.type == self.token.NUMBER and current.stack_pointer < 0: # number literals
 			current.stack_pointer = self.stack_pointer
 			write_code = write_code + "mov %s %s ; WTF\n" % (current.reference(), current.content)
 			self.stack_pointer += 8
 		
 		return write_code
 	
-	def compile_branch(self, tree, write_code = text_section):
+	def compile_branch(self, tree, write_code = text_section): # loop through all tokens in a branch and compile them
 		if not tree:
 			return
 		
@@ -401,7 +401,7 @@ class amber_compiler:
 		
 		return write_code
 	
-	def compile_data(self, data):
+	def compile_data(self, data): # check if data is already recorded and create a new entry if not
 		for i in range(len(self.data)):
 			self.data_section = self.data_section + "?_amber_data_%d: db" % i
 			
@@ -419,7 +419,7 @@ class amber_compiler:
 			print "%s%s\t%s" % (" " * indent, "->" if token.type == self.token.EXPRESSION else "-(" if token.type == self.token.FUNCTION_CALL else "{" if token.type == self.token.BLOCK else str(token.type), token.content)
 			self.print_tree(token, indent + 1)
 	
-	def compile(self):
+	def compile(self): # compile everything automatically
 		self.lex(self.code)
 		print "\n=== RAW TOKENS ===\n"
 		self.print_tokens(self.tokens)
