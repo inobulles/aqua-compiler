@@ -109,7 +109,7 @@ class amber_compiler:
 			elif white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
-						if   self.tokens[-1].content in ["if", "func", "return"]: self.tokens[-1].type = self.token.STATEMENT
+						if   self.tokens[-1].content in ["if", "func", "class", "return"]: self.tokens[-1].type = self.token.STATEMENT
 						elif self.tokens[-1].content in ["int", "uint"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
@@ -196,8 +196,11 @@ class amber_compiler:
 				write_code = self.compile_branch(argument, write_code)
 			
 			argument_registers = ["rdi", "rsi", "rdx", "rcx"]
-			for i in range(len(current.tokens[0].tokens)):
-				write_code = write_code + "mov %s %s ; WTF\n" % (argument_registers[i], current.tokens[0].tokens[i].reference())
+			for i in range(len(current.tokens)):
+				reference = current.tokens[i].reference()
+				
+				if reference:
+					write_code = write_code + "mov %s %s ; WTF\n" % (argument_registers[i], reference)
 			
 			current.stack_pointer = self.stack_pointer
 			write_code = write_code + "call %s ; FIXME this comment is needed for some reason ; WTF\nmov %s rax ; WTF\n" % (current.call_token.reference(), current.reference())
@@ -250,6 +253,12 @@ class amber_compiler:
 					code = self.compile_token(current.tokens[2], code)
 					write_code = code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT + write_code
 				
+				elif current.tokens[0].content == "class":
+					name = current.tokens[1].content
+					
+					for member in current.tokens[2].tokens[0: -1]:
+						print "type = %s, name = %s, set = %d" % (member.tokens[0].content, member.tokens[1].content, len(member.tokens))
+				
 				elif current.tokens[0].content == "return":
 					if len(current.tokens) >= 2: write_code = self.compile_token(current.tokens[1], write_code) + "mov rax %s ; WTF\n" % current.tokens[1].reference() + self.FUNCTION_LEAVE_FORMAT
 					else: write_code = write_code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT
@@ -264,9 +273,9 @@ class amber_compiler:
 					current.stack_pointer = self.stack_pointer
 					
 					def get_operator_token_precedence(operator):
-						if   operator.content in "!=":  return 2
-						elif operator.content in "*/%": return 3
+						if operator.content in "*/%": return 3
 						elif operator.content in "+-":  return 4
+						elif operator.content == "=": return 5
 						elif operator.content == "":    return 17
 						
 						return 16
@@ -304,16 +313,17 @@ class amber_compiler:
 						elif operator.content == "%": instruction = "mod"
 						elif operator.content == "-": instruction = "sub"
 						
-						if instruction == "nop":
-							print "REMME: Unsupported instruction" + operator.content + ";"
+						elif operator.content == "=":
+							write_code = write_code + "mov rax %s ; WTF\nmov %s rax ; WTF\n" % (current.tokens[min_index + 1].reference(), current.tokens[min_index - 1].reference())
 						
 						operator.content = "\0"
 						
-						if not i:
-							write_code = write_code + "mov rax %s ; WTF\n" % current.tokens[min_index - 1].reference()
-						
-						if went_left: write_code = write_code + "mov rbx rax ; WTF\nmov rax %s ; WTF\n%s rax rbx ; WTF\n" % (current.tokens[min_index - 1].reference(), instruction)
-						else:         write_code = write_code + "%s rax %s ; WTF\n" % (instruction, current.tokens[min_index + 1].reference())
+						if instruction != "nop":
+							if not i:
+								write_code = write_code + "mov rax %s ; WTF\n" % current.tokens[min_index - 1].reference()
+							
+							if went_left: write_code = write_code + "mov rbx rax ; WTF\nmov rax %s ; WTF\n%s rax rbx ; WTF\n" % (current.tokens[min_index - 1].reference(), instruction)
+							else:         write_code = write_code + "%s rax %s ; WTF\n" % (instruction, current.tokens[min_index + 1].reference())
 					
 					write_code = write_code + "mov %s rax ; WTF\n" % current.reference()
 					self.stack_pointer += 8
