@@ -9,3 +9,5 @@ langs/c/src
 langs/c/objconv
 langs/c/objconv-src
 langs/c/main.o
+
+langs/amber/src
