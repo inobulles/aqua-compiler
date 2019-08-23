@@ -45,6 +45,8 @@ static uint8_t assembler_target = ASSEMBLER_TARGET_ZED;
 static uint64_t res_pos_label_count = 0;
 static uint64_t data_label_count = 0;
 
+static uint64_t main_reserved_position = 0;
+
 static token_t* res_pos_label_identifiers = (token_t*) 0;
 static token_t* data_label_identifiers = (token_t*) 0;
 
@@ -100,8 +102,8 @@ static inline void assembler_add_token(uint8_t type, uint64_t data) {
 }
 
 static int assemble(void) {
-	token_t* res_pos_label_identifiers = (token_t*) malloc(sizeof(token_t));
-	token_t* data_label_identifiers = (token_t*) malloc(sizeof(token_t));
+	res_pos_label_identifiers = (token_t*) malloc(sizeof(token_t));
+	data_label_identifiers = (token_t*) malloc(sizeof(token_t));
 	
 	res_pos_label_count = 0;
 	data_label_count = 0;
@@ -246,12 +248,6 @@ static int assemble(void) {
 		
 	}
 	
-	for (uint64_t i = 0; i < text_section_bytes; i++) {
-		printf("%x\t", text_section_data[i]);
-		if (!((i + 1) % 8)) printf("\n");
-		
-	}
-	
 	if (!found_main_label) {
 		printf("WARNING Could not find the main reserved position label\n");
 		
@@ -261,9 +257,60 @@ static int assemble(void) {
 	
 }
 
+typedef struct {
+	uint64_t length, version, invalidated;
+	uint64_t prereserved_count, data_section_element_count;
+	uint64_t reserved_positions_count, main_reserved_position;
+	
+} rom_meta_section_t;
+
 static int build_rom(void) {
-	fprintf(stderr, "TODO %s\n", __func__);
-	return 1;
+	rom_meta_section_t meta = {
+		.length = 0,
+		.version = 4,
+		.invalidated = 0,
+		
+		.prereserved_count = sizeof(assembler_prereserved) / sizeof(*assembler_prereserved),
+		.data_section_element_count = data_label_count,
+		
+		.reserved_positions_count = res_pos_label_count,
+		.main_reserved_position = /*main_reserved_position*/ 0x1337,
+	};
+	
+	rom_data = (char*) malloc(sizeof(meta));
+	memcpy(rom_data, &meta, sizeof(meta)); // write the meta section to the rom
+	
+	for (uint64_t i = 0; i < data_label_count; i++) { // write the size of each data element
+		rom_data = (char*) realloc(rom_data, rom_bytes = sizeof(meta) + i * sizeof(uint64_t));
+		((uint64_t*) rom_data)[rom_bytes / sizeof(uint64_t) - 1] = data_label_identifiers[i].data_label_bytes;
+		
+	} for (uint64_t i = 0; i < data_label_count; i++) { // write each data element to the contiguous data section
+		rom_data = (char*) realloc(rom_data, rom_bytes + data_label_identifiers[i].data_label_bytes);
+		memcpy(rom_data + rom_bytes, data_label_identifiers[i].data_label_array, data_label_identifiers[i].data_label_bytes);
+		rom_bytes += data_label_identifiers[i].data_label_bytes;
+		
+	} for (uint64_t i = 0; i < res_pos_label_count; i++) { // write all the reserved positions to the reserved positions section
+		rom_bytes = ((rom_bytes - 1) / sizeof(uint64_t) + 1) * sizeof(uint64_t);
+		rom_data = (char*) realloc(rom_data, ((rom_bytes - 1) / sizeof(uint64_t) + 1) * sizeof(uint64_t) + 1);
+		((uint64_t*) rom_data)[(rom_bytes - 1) / sizeof(uint64_t) + 1] = res_pos_label_identifiers[i].reserved_position;
+		rom_bytes += sizeof(uint64_t);
+		
+	}
+	
+	// write text section
+	
+	rom_data = (char*) realloc(rom_data, rom_bytes + text_section_bytes);
+	memcpy(rom_data + rom_bytes, text_section_data, text_section_bytes);
+	rom_bytes += text_section_bytes;
+	
+	for (uint64_t i = 0; i < rom_bytes; i++) {
+		printf("%x\t", rom_data[i]);
+		if (!((i + 1) % 8)) printf("\n");
+		
+	}
+	
+	printf("\n");
+	return 0;
 	
 }
 
@@ -331,14 +378,6 @@ int main(int argc, char* argv[]) {
 		
 	}
 	
-	output = fopen(output_path, "wb");
-	if (!output) {
-		fprintf(stderr, "ERROR Could not load %s file (as output)\n", output_path);
-		assembler_free();
-		return 1;
-		
-	}
-	
 	fseek(input, 0, SEEK_END);
 	code_bytes = ftell(input);
 	if (assembler_verbose) printf("ASM File is %ld bytes long\n", code_bytes);
@@ -359,7 +398,16 @@ int main(int argc, char* argv[]) {
 		
 	}
 	
-	fwrite(rom_data, sizeof(uint8_t), rom_bytes, output);
+	output = fopen(output_path, "wb");
+	if (!output) {
+		fprintf(stderr, "ERROR Could not load %s file (as output)\n", output_path);
+		assembler_free();
+		return 1;
+		
+	}
+	
+	if (assembler_verbose) printf("Writing ROM to output path (%s) ...\n", output_path);
+	if (rom_data) fwrite(rom_data, sizeof(uint8_t), rom_bytes, output);
 	if (assembler_verbose) printf("Assembler finished with success\n");
 	
 	assembler_free();
