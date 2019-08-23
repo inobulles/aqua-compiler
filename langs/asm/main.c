@@ -48,8 +48,11 @@ static uint64_t data_label_count = 0;
 static token_t* res_pos_label_identifiers = (token_t*) 0;
 static token_t* data_label_identifiers = (token_t*) 0;
 
-static char* rom_data = (char*) 0;
-static char rom_bytes = 0;
+static uint64_t text_section_bytes = 0;
+static uint8_t* text_section_data = (uint8_t*) 0;
+
+static uint64_t rom_bytes = 0;
+static uint8_t* rom_data = (uint8_t*) 0;
 
 static uint64_t current_line_number;
 
@@ -72,6 +75,27 @@ static inline int64_t assembler_store_token(token_t* self, char* string) {
 	else                         *value_reference = strtoll(self->data,     &endptr, 10); // decimal
 	
 	return endptr == self->data || strlen(endptr);
+	
+}
+
+static inline void assembler_add_8bit_value(uint8_t value) {
+	text_section_data = (uint8_t*) realloc(text_section_data, text_section_bytes + 2);
+	text_section_data[text_section_bytes++] = value;
+	
+} static inline void assembler_add_64bit_value(uint64_t value) {
+	text_section_bytes = ((text_section_bytes - 1) / sizeof(uint64_t) + 1) * sizeof(uint64_t);
+	text_section_data = (uint8_t*) realloc(text_section_data, ((text_section_bytes - 1) / sizeof(uint64_t) + 1) * sizeof(uint64_t) + 1);
+	((uint64_t*) text_section_data)[(text_section_bytes - 1) / sizeof(uint64_t) + 1] = value;
+	text_section_bytes += sizeof(uint64_t);
+	
+}
+
+static inline void assembler_add_token(uint8_t type, uint64_t data) {
+	type = type == TOKEN_NUMBER && data < 0x100 ? TOKEN_BYTE : type;
+	assembler_add_8bit_value(type);
+	
+	if (type == TOKEN_NUMBER || type == TOKEN_RES_POS || type == TOKEN_RESERVED) assembler_add_64bit_value(data);
+	else                                                                         assembler_add_8bit_value (data);
 	
 }
 
@@ -143,6 +167,10 @@ static int assemble(void) {
 	uint8_t in_data_section = 0;
 	uint8_t found_main_label = 0;
 	
+	text_section_bytes = 0;
+	text_section_data = (uint8_t*) malloc(1);
+	*text_section_data = 0;
+	
 	if (assembler_verbose) printf("Reading assembly and building text section ...\n");
 	current_line_number = 1;
 	for (uint64_t i = 0; i < code_bytes; i++) {
@@ -181,20 +209,11 @@ static int assemble(void) {
 				i += 1 + assembler_store_token(&token, current);
 				int64_t instruction, _register, res_pos_label, data_label, prereserved;
 				
-				if ((instruction = assembler_token_index(sizeof(assembler_instructions) / sizeof(*assembler_instructions), assembler_instructions, &token)) >= 0) {
-					printf("INSTRUCTION %ld\n", instruction);
-					
-				} else if ((_register = assembler_token_index(sizeof(assembler_registers) / sizeof(*assembler_registers), assembler_registers, &token)) >= 0) {
-					printf("REGISTER %ld\n", _register);
-					
-				} else if ((res_pos_label = assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &token)) >= 0) {
-					printf("RESPOS %ld\n", res_pos_label);
-					
-				} else if ((data_label = assembler_token_index(data_label_count, data_label_identifiers, &token)) >= 0) {
-					printf("DATA %ld\n", data_label);
-					
-				} else if ((prereserved = assembler_token_index(sizeof(assembler_prereserved) / sizeof(*assembler_prereserved), assembler_prereserved, &token)) >= 0) {
-					printf("PRERESERVED %ld\n", prereserved);
+				if      ((instruction   = assembler_token_index(sizeof(assembler_instructions) / sizeof(*assembler_instructions), assembler_instructions, &token)) >= 0) assembler_add_token(TOKEN_INSTRUCTION, instruction);
+				else if ((_register     = assembler_token_index(sizeof(assembler_registers   ) / sizeof(*assembler_registers   ), assembler_registers,    &token)) >= 0) assembler_add_token(TOKEN_REGISTER, _register);
+				else if ((res_pos_label = assembler_token_index(res_pos_label_count, res_pos_label_identifiers,                                           &token)) >= 0) assembler_add_token(TOKEN_RES_POS, res_pos_label);
+				else if ((data_label    = assembler_token_index(data_label_count, data_label_identifiers,                                                 &token)) >= 0) assembler_add_token(TOKEN_RESERVED, sizeof(assembler_prereserved) / sizeof(*assembler_prereserved) + data_label);
+				else if ((prereserved   = assembler_token_index(sizeof(assembler_prereserved ) / sizeof(*assembler_prereserved ), assembler_prereserved,  &token)) >= 0) assembler_add_token(TOKEN_RESERVED, prereserved);
 					
 				} else if (token.data[1] == '[' || token.data[0] == '[') { /// TODO addresses
 					if (token.data[0] == '8' || token.data[0] == '[') { // 64 bit addressing
@@ -209,12 +228,13 @@ static int assemble(void) {
 					}
 					
 				} else { // test if maybe this is a number literal
-					int64_t value = 0;
-					if (assembler_token_to_number(&token, &value)) {
+					int64_t number = 0;
+					if (assembler_token_to_number(&token, &number)) {
 						printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
 						
 					} else {
-						printf("NUMBER %ld\n", value);
+						//~ printf("NUMBER %ld\n", number);
+						assembler_add_token(TOKEN_NUMBER, number);
 						
 					}
 					
@@ -223,6 +243,12 @@ static int assemble(void) {
 			}
 			
 		}
+		
+	}
+	
+	for (uint64_t i = 0; i < text_section_bytes; i++) {
+		printf("%x\t", text_section_data[i]);
+		if (!((i + 1) % 8)) printf("\n");
 		
 	}
 	
@@ -252,6 +278,8 @@ static void assembler_free(void) {
 	
 	if (res_pos_label_identifiers) free(res_pos_label_identifiers);
 	if (data_label_identifiers) free(data_label_identifiers);
+	
+	if (text_section_data) free(text_section_data);
 	
 }
 
@@ -331,7 +359,7 @@ int main(int argc, char* argv[]) {
 		
 	}
 	
-	fwrite(rom_data, sizeof(char), rom_bytes, output);
+	fwrite(rom_data, sizeof(uint8_t), rom_bytes, output);
 	if (assembler_verbose) printf("Assembler finished with success\n");
 	
 	assembler_free();

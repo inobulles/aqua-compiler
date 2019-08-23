@@ -1,4 +1,16 @@
 
+#define TOKEN_INSTRUCTION 0
+#define TOKEN_REGISTER    1
+
+#define TOKEN_RESERVED    2
+#define TOKEN_RES_POS     3
+
+#define TOKEN_ADDRESS     4
+#define TOKEN_BYTE_ADDR   5
+
+#define TOKEN_NUMBER      6
+#define TOKEN_BYTE        7
+
 static token_t assembler_instructions[] = {
 	{"cla"}, {"mov"},
 	{"cnd"}, {"cmp"},
