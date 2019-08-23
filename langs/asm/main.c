@@ -53,11 +53,7 @@ static char rom_bytes = 0;
 
 static uint64_t current_line_number;
 
-static inline int64_t assembler_compare_token(char* string, char* comparator) {
-	while (!IS_WHITE(*string)) if (*string++ != *comparator++) break;
-	return *((const uint8_t*) string) - *((const uint8_t*) comparator);
-	
-} static inline int64_t assembler_store_token(token_t* self, char* string) {
+static inline int64_t assembler_store_token(token_t* self, char* string) {
 	memset(self, 0, sizeof(*self));
 	uint8_t warn_too_big = 0;
 	for (; !(self->bytes >= MAX_TOKEN_LENGTH && (warn_too_big = 1) /* look at this beauty */) && !IS_WHITE(*string); self->bytes++) self->data[self->bytes] = *string++;
@@ -182,8 +178,6 @@ static int assemble(void) {
 				i += 1 + assembler_store_token(&token, current);
 				int64_t instruction, _register, res_pos_label, data_label, prereserved;
 				
-				/// TODO addresses and number literals
-				
 				if ((instruction = assembler_token_index(sizeof(assembler_instructions) / sizeof(*assembler_instructions), assembler_instructions, &token)) >= 0) {
 					printf("INSTRUCTION %ld\n", instruction);
 					
@@ -199,8 +193,33 @@ static int assemble(void) {
 				} else if ((prereserved = assembler_token_index(sizeof(assembler_prereserved) / sizeof(*assembler_prereserved), assembler_prereserved, &token)) >= 0) {
 					printf("PRERESERVED %ld\n", prereserved);
 					
-				} else {
-					printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
+				} else if (token.data[1] == '[' || token.data[0] == '[') { /// TODO addresses
+					if (token.data[0] == '8' || token.data[0] == '[') { // 64 bit addressing
+						printf("ADDRESS 8 byte %s\n", token.data);
+						
+					} else if (token.data[0] == '1') { // 8 bit addressing
+						printf("ADDRESS 1 byte %s\n", token.data);
+						
+					} else {
+						printf("WARNING Line %ld, unknown addressing type %c\n", current_line_number, *current);
+						
+					}
+					
+				} else { // test if maybe this is a number literal
+					int64_t value = 0;
+					char* endptr = (char*) 0;
+					
+					if      (*token.data == 'x') value = strtoll(token.data + 1, &endptr, 16); // hexadecimal
+					else if (*token.data == 'b') value = strtoll(token.data + 1, &endptr, 2);  // binary
+					else                         value = strtoll(token.data,     &endptr, 10); // decimal
+					
+					if (endptr == token.data || strlen(endptr)) {
+						printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
+						
+					} else {
+						printf("NUMBER %ld\n", value);
+						
+					}
 					
 				}
 				
