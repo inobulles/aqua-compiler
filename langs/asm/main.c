@@ -5,30 +5,6 @@
 #include <stdlib.h>
 #include <errno.h>
 
-static FILE* input = (FILE*) 0;
-static FILE* output = (FILE*) 0;
-
-static char* code = (char*) 0;
-static uint64_t code_bytes = 0;
-
-static uint8_t assembler_verbose = 0;
-static uint8_t assembler_warnings = 1;
-
-static char* input_path = "code.asm";
-static char* output_path = "rom.zed";
-
-static char* rom_data = (char*) 0;
-static char rom_bytes = 0;
-
-static void assembler_free(void) {
-	if (input) fclose(input);
-	if (output) fclose(output);
-	
-	if (code) free(code);
-	if (rom_data) free(rom_data);
-	
-}
-
 #define DATA_LABEL_TOKEN '%'
 #define RES_POS_LABEL_TOKEN ':'
 
@@ -42,20 +18,55 @@ typedef struct {
 	uint64_t data_label_bytes;
 	uint8_t* data_label_array;
 	
+	uint64_t reserved_position;
+	
 } token_t;
+
+#include "database.h"
+
+static FILE* input = (FILE*) 0;
+static FILE* output = (FILE*) 0;
+
+static char* code = (char*) 0;
+static uint64_t code_bytes = 0;
+
+static uint8_t assembler_verbose = 0;
+static uint8_t assembler_warnings = 1;
+static uint8_t assembler_extra_checks = 1;
+
+static char* input_path = "code.asm";
+static char* output_path = "rom.zed";
+
+#define ASSEMBLER_TARGET_ZED 0
+#define ASSEMBLER_TARGET_X86 1
+
+static uint8_t assembler_target = ASSEMBLER_TARGET_ZED;
+
+static uint64_t res_pos_label_count = 0;
+static uint64_t data_label_count = 0;
+
+static token_t* res_pos_label_identifiers = (token_t*) 0;
+static token_t* data_label_identifiers = (token_t*) 0;
+
+static char* rom_data = (char*) 0;
+static char rom_bytes = 0;
 
 static uint64_t current_line_number;
 
-static inline int assembler_compare_token(char* string, char* comparator) {
+static inline int64_t assembler_compare_token(char* string, char* comparator) {
 	while (!IS_WHITE(*string)) if (*string++ != *comparator++) break;
 	return *((const uint8_t*) string) - *((const uint8_t*) comparator);
 	
-} static inline int assembler_store_token(token_t* self, char* string) {
+} static inline int64_t assembler_store_token(token_t* self, char* string) {
 	memset(self, 0, sizeof(*self));
 	uint8_t warn_too_big = 0;
 	for (; !(self->bytes >= MAX_TOKEN_LENGTH && (warn_too_big = 1) /* look at this beauty */) && !IS_WHITE(*string); self->bytes++) self->data[self->bytes] = *string++;
 	if (warn_too_big && assembler_warnings) printf("WARNING Line %ld, token %s has surpassed the maximum length (%d)\n", current_line_number, self->data, MAX_TOKEN_LENGTH);
 	return self->bytes - 1;
+	
+} static inline int64_t assembler_token_index(uint64_t count, token_t* list, token_t* comparator) { // search through list of tokens and find index of matching token (returns -1 if no match)
+	for (uint64_t i = 0; i < count; i++) if (strcmp(list[i].data, comparator->data) == 0) return i;
+	return -1;
 	
 }
 
@@ -63,12 +74,13 @@ static int assemble(void) {
 	token_t* res_pos_label_identifiers = (token_t*) malloc(sizeof(token_t));
 	token_t* data_label_identifiers = (token_t*) malloc(sizeof(token_t));
 	
-	uint64_t res_pos_label_count = 0;
-	uint64_t data_label_count = 0;
+	res_pos_label_count = 0;
+	data_label_count = 0;
 	
 	token_t* current_data_label = (token_t*) 0;
 	uint8_t in_comment = 0;
 	
+	if (assembler_verbose) printf("Indexing all the label names and parsing data sections ...\n");
 	current_line_number = 1;
 	for (uint64_t i = 0; i < code_bytes; i++) {
 		char* current = code + i;
@@ -112,11 +124,13 @@ static int assemble(void) {
 				
 			} else if (*current == RES_POS_LABEL_TOKEN) { // found reserved position label
 				res_pos_label_identifiers = (token_t*) realloc(res_pos_label_identifiers, (res_pos_label_count + 2) * sizeof(token_t));
-				i += 1 + assembler_store_token(&res_pos_label_identifiers[res_pos_label_count++], current + 1);
+				i += 2 + assembler_store_token(&res_pos_label_identifiers[res_pos_label_count++], current + 1);
+				if (assembler_extra_checks && assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &res_pos_label_identifiers[res_pos_label_count - 1]) < res_pos_label_count - 1) printf("WARNING Line %ld, reserved position label %s declared multiple times\n", current_line_number, res_pos_label_identifiers[res_pos_label_count - 1].data);
 				
 			} else if (*current == DATA_LABEL_TOKEN) { // found data label
 				data_label_identifiers = (token_t*) realloc(data_label_identifiers, (data_label_count + 2) * sizeof(token_t));
 				i += 1 + assembler_store_token(&data_label_identifiers[data_label_count], current + 1);
+				if (assembler_extra_checks && assembler_token_index(data_label_count, data_label_identifiers, &data_label_identifiers[data_label_count]) < data_label_count) printf("WARNING Line %ld, data label %s declared multiple times\n", current_line_number, data_label_identifiers[data_label_count].data);
 				data_label_identifiers[data_label_count].data_label_array = (uint8_t*) malloc(1);
 				current_data_label = &data_label_identifiers[data_label_count++];
 				
@@ -126,13 +140,80 @@ static int assemble(void) {
 		
 	}
 	
-	for (uint64_t i = 0; i < data_label_count; i++) {
-		free(data_label_identifiers[i].data_label_array);
+	in_comment = 0;
+	uint8_t in_data_section = 0;
+	uint8_t found_main_label = 0;
+	
+	if (assembler_verbose) printf("Reading assembly and building text section ...\n");
+	current_line_number = 1;
+	for (uint64_t i = 0; i < code_bytes; i++) {
+		char* current = code + i;
+		
+		if (*current == '\n') {
+			current_line_number++;
+			in_comment = 0;
+			
+		} else if (*current == '#') {
+			in_comment = !in_comment;
+			
+		} else if (!in_comment) {
+			if (in_data_section) { // stall text section reading if inside data section
+				if (*current == DATA_LABEL_TOKEN) { // found end of data label
+					in_data_section = 0;
+					
+				}
+				
+			} else if (*current == DATA_LABEL_TOKEN) { // found data label
+				in_data_section = 1;
+				
+			} else if (*current == RES_POS_LABEL_TOKEN) { // found reserved position label
+				token_t identifier;
+				i += 2 + assembler_store_token(&identifier, current + 1);
+				res_pos_label_identifiers[assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &identifier)].reserved_position = 1337; /// TODO
+				
+				if (strcmp(identifier.data, "main") == 0) {
+					found_main_label = 1;
+					/// TODO set main reserved position
+					
+				}
+				
+			} else if (!IS_WHITE(*current)) {
+				token_t token;
+				i += 1 + assembler_store_token(&token, current);
+				int64_t instruction, _register, res_pos_label, data_label, prereserved;
+				
+				/// TODO addresses and number literals
+				
+				if ((instruction = assembler_token_index(sizeof(assembler_instructions) / sizeof(*assembler_instructions), assembler_instructions, &token)) >= 0) {
+					printf("INSTRUCTION %ld\n", instruction);
+					
+				} else if ((_register = assembler_token_index(sizeof(assembler_registers) / sizeof(*assembler_registers), assembler_registers, &token)) >= 0) {
+					printf("REGISTER %ld\n", _register);
+					
+				} else if ((res_pos_label = assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &token)) >= 0) {
+					printf("RESPOS %ld\n", res_pos_label);
+					
+				} else if ((data_label = assembler_token_index(data_label_count, data_label_identifiers, &token)) >= 0) {
+					printf("DATA %ld\n", data_label);
+					
+				} else if ((prereserved = assembler_token_index(sizeof(assembler_prereserved) / sizeof(*assembler_prereserved), assembler_prereserved, &token)) >= 0) {
+					printf("PRERESERVED %ld\n", prereserved);
+					
+				} else {
+					printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
+					
+				}
+				
+			}
+			
+		}
 		
 	}
 	
-	free(res_pos_label_identifiers);
-	free(data_label_identifiers);
+	if (!found_main_label) {
+		printf("WARNING Could not find the main reserved position label\n");
+		
+	}
 	
 	return 0;
 	
@@ -141,6 +222,20 @@ static int assemble(void) {
 static int build_rom(void) {
 	fprintf(stderr, "TODO %s\n", __func__);
 	return 1;
+	
+}
+
+static void assembler_free(void) {
+	if (input) fclose(input);
+	if (output) fclose(output);
+	
+	if (code) free(code);
+	if (rom_data) free(rom_data);
+	
+	for (uint64_t i = 0; i < data_label_count; i++) if (data_label_identifiers[i].data_label_array) free(data_label_identifiers[i].data_label_array);
+	
+	if (res_pos_label_identifiers) free(res_pos_label_identifiers);
+	if (data_label_identifiers) free(data_label_identifiers);
 	
 }
 
@@ -154,6 +249,10 @@ int main(int argc, char* argv[]) {
 			assembler_warnings = 0;
 			if (assembler_verbose) printf("Disabled warnings\n");
 			
+		} else if (strcmp(argv[i], "no-checks") == 0) {
+			assembler_extra_checks = 0;
+			if (assembler_verbose) printf("Disabled extra checks\n");
+			
 		} else if (strcmp(argv[i], "in") == 0) {
 			input_path = argv[++i];
 			if (assembler_verbose) printf("Set input path to %s\n", input_path);
@@ -161,6 +260,17 @@ int main(int argc, char* argv[]) {
 		} else if (strcmp(argv[i], "out") == 0) {
 			output_path = argv[++i];
 			if (assembler_verbose) printf("Set output path to %s\n", output_path);
+			
+		} else if (strcmp(argv[i], "target") == 0) {
+			char* target = argv[++i];
+			
+			if      (strcmp(target, "zed") == 0) assembler_target = ASSEMBLER_TARGET_ZED;
+			else if (strcmp(target, "x86") == 0) assembler_target = ASSEMBLER_TARGET_X86;
+			
+			else if (assembler_verbose) {
+				printf("WARNING Unknown target %s\n", target);
+				
+			}
 			
 		} else if (assembler_verbose) {
 			printf("WARNING Unknown flag %s\n", argv[i]);
