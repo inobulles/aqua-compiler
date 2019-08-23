@@ -64,6 +64,15 @@ static inline int64_t assembler_store_token(token_t* self, char* string) {
 	for (uint64_t i = 0; i < count; i++) if (strcmp(list[i].data, comparator->data) == 0) return i;
 	return -1;
 	
+} static inline uint8_t assembler_token_to_number(token_t* self, int64_t* value_reference) { // returns 0 on success
+	char* endptr = (char*) 0;
+	
+	if      (*self->data == 'x') *value_reference = strtoll(self->data + 1, &endptr, 16); // hexadecimal
+	else if (*self->data == 'b') *value_reference = strtoll(self->data + 1, &endptr, 2);  // binary
+	else                         *value_reference = strtoll(self->data,     &endptr, 10); // decimal
+	
+	return endptr == self->data || strlen(endptr);
+	
 }
 
 static int assemble(void) {
@@ -97,14 +106,8 @@ static int assemble(void) {
 					token_t token;
 					i += assembler_store_token(&token, current);
 					
-					uint64_t byte = 0;
-					char* endptr = (char*) 0;
-					
-					if      (*token.data == 'x') byte = strtoll(token.data + 1, &endptr, 16); // hexadecimal
-					else if (*token.data == 'b') byte = strtoll(token.data + 1, &endptr, 2);  // binary
-					else                         byte = strtoll(token.data,     &endptr, 10); // decimal
-					
-					if (endptr == token.data || strlen(endptr)) {
+					int64_t byte = 0;
+					if (assembler_token_to_number(&token, &byte)) {
 						printf("WARNING Line %ld, found unknown token %s in data label %s\n", current_line_number, token.data, current_data_label->data);
 						
 					} if (byte > 0xFF) {
@@ -207,13 +210,7 @@ static int assemble(void) {
 					
 				} else { // test if maybe this is a number literal
 					int64_t value = 0;
-					char* endptr = (char*) 0;
-					
-					if      (*token.data == 'x') value = strtoll(token.data + 1, &endptr, 16); // hexadecimal
-					else if (*token.data == 'b') value = strtoll(token.data + 1, &endptr, 2);  // binary
-					else                         value = strtoll(token.data,     &endptr, 10); // decimal
-					
-					if (endptr == token.data || strlen(endptr)) {
+					if (assembler_token_to_number(&token, &value)) {
 						printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
 						
 					} else {
@@ -268,7 +265,7 @@ int main(int argc, char* argv[]) {
 			assembler_warnings = 0;
 			if (assembler_verbose) printf("Disabled warnings\n");
 			
-		} else if (strcmp(argv[i], "no-checks") == 0) {
+		} else if (strcmp(argv[i], "no-checks") == 0) { /// TODO find "assembler_extra_checks" and see if this is actually used. Otherwise, remove it, obv
 			assembler_extra_checks = 0;
 			if (assembler_verbose) printf("Disabled extra checks\n");
 			
@@ -280,7 +277,7 @@ int main(int argc, char* argv[]) {
 			output_path = argv[++i];
 			if (assembler_verbose) printf("Set output path to %s\n", output_path);
 			
-		} else if (strcmp(argv[i], "target") == 0) {
+		} else if (strcmp(argv[i], "target") == 0) { /// TODO not sure if this will even be in C version, or if ill wait until rewriting this assembler in Amber
 			char* target = argv[++i];
 			
 			if      (strcmp(target, "zed") == 0) assembler_target = ASSEMBLER_TARGET_ZED;
