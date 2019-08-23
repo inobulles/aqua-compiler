@@ -214,8 +214,8 @@ static int assemble(void) {
 				else if ((res_pos_label = assembler_token_index(res_pos_label_count, res_pos_label_identifiers,                                           &token)) >= 0) assembler_add_token(TOKEN_RES_POS, res_pos_label);
 				else if ((data_label    = assembler_token_index(data_label_count, data_label_identifiers,                                                 &token)) >= 0) assembler_add_token(TOKEN_RESERVED, sizeof(assembler_prereserved) / sizeof(*assembler_prereserved) + data_label);
 				else if ((prereserved   = assembler_token_index(sizeof(assembler_prereserved ) / sizeof(*assembler_prereserved ), assembler_prereserved,  &token)) >= 0) assembler_add_token(TOKEN_RESERVED, prereserved);
-					
-				} else if (token.data[1] == '[' || token.data[0] == '[') { /// TODO addresses
+				
+				else if (token.data[1] == '[' || token.data[0] == '[') { /// TODO addresses
 					if (token.data[0] == '8' || token.data[0] == '[') { // 64 bit addressing
 						printf("ADDRESS 8 byte %s\n", token.data);
 						
