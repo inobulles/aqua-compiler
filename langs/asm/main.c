@@ -110,22 +110,36 @@ static int assemble(void) {
 	
 	token_t* current_data_label = (token_t*) 0;
 	uint8_t in_comment = 0;
+	uint8_t in_string = 0;
 	
 	if (assembler_verbose) printf("Indexing all the label names and parsing data sections ...\n");
 	current_line_number = 1;
 	for (uint64_t i = 0; i < code_bytes; i++) {
 		char* current = code + i;
 		
-		if (*current == '\n') {
+		if (!in_string && *current == '\n') {
 			current_line_number++;
 			in_comment = 0;
 			
-		} else if (*current == '#') {
+		} else if (!in_comment && *current == '"') {
+			in_string = !in_string;
+			
+		} else if (!in_string && *current == '#') {
 			in_comment = !in_comment;
 			
 		} else if (!in_comment) {
 			if (current_data_label) {
-				if (*current == DATA_LABEL_TOKEN) { // found end of data label
+				if (in_string) {
+					current_data_label->data_label_array = (uint8_t*) realloc(current_data_label->data_label_array, (current_data_label->data_label_bytes + 2) * sizeof(uint8_t));
+					current_data_label->data_label_array[current_data_label->data_label_bytes++] = *current;
+					
+					if (*current == '\n') {
+						current_line_number++;
+						in_comment = 0;
+						
+					}
+					
+				} else if (*current == DATA_LABEL_TOKEN) { // found end of data label
 					current_data_label = (token_t*) 0;
 					
 				} else if (!IS_WHITE(*current)) {
@@ -147,12 +161,12 @@ static int assemble(void) {
 					
 				}
 				
-			} else if (*current == RES_POS_LABEL_TOKEN) { // found reserved position label
+			} else if (!in_string && *current == RES_POS_LABEL_TOKEN) { // found reserved position label
 				res_pos_label_identifiers = (token_t*) realloc(res_pos_label_identifiers, (res_pos_label_count + 2) * sizeof(token_t));
 				i += 2 + assembler_store_token(&res_pos_label_identifiers[res_pos_label_count++], current + 1);
 				if (assembler_extra_checks && assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &res_pos_label_identifiers[res_pos_label_count - 1]) < res_pos_label_count - 1) printf("WARNING Line %ld, reserved position label %s declared multiple times\n", current_line_number, res_pos_label_identifiers[res_pos_label_count - 1].data);
 				
-			} else if (*current == DATA_LABEL_TOKEN) { // found data label
+			} else if (!in_string && *current == DATA_LABEL_TOKEN) { // found data label
 				data_label_identifiers = (token_t*) realloc(data_label_identifiers, (data_label_count + 2) * sizeof(token_t));
 				i += 1 + assembler_store_token(&data_label_identifiers[data_label_count], current + 1);
 				if (assembler_extra_checks && assembler_token_index(data_label_count, data_label_identifiers, &data_label_identifiers[data_label_count]) < data_label_count) printf("WARNING Line %ld, data label %s declared multiple times\n", current_line_number, data_label_identifiers[data_label_count].data);
@@ -166,6 +180,8 @@ static int assemble(void) {
 	}
 	
 	in_comment = 0;
+	in_string = 0;
+	
 	uint8_t in_data_section = 0;
 	uint8_t found_main_label = 0;
 	
@@ -182,10 +198,13 @@ static int assemble(void) {
 			current_line_number++;
 			in_comment = 0;
 			
-		} else if (*current == '#') {
+		} else if (!in_comment && *current == '"') {
+			in_string = !in_string;
+			
+		} else if (!in_string && *current == '#') {
 			in_comment = !in_comment;
 			
-		} else if (!in_comment) {
+		} else if (!in_comment && !in_string) {
 			if (in_data_section) { // stall text section reading if inside data section
 				if (*current == DATA_LABEL_TOKEN) { // found end of data label
 					in_data_section = 0;
