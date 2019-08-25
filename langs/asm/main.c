@@ -198,11 +198,11 @@ static int assemble(void) {
 			} else if (*current == RES_POS_LABEL_TOKEN) { // found reserved position label
 				token_t identifier;
 				i += 2 + assembler_store_token(&identifier, current + 1);
-				res_pos_label_identifiers[assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &identifier)].reserved_position = 1337; /// TODO
+				res_pos_label_identifiers[assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &identifier)].reserved_position = text_section_bytes;
 				
 				if (strcmp(identifier.data, "main") == 0) {
 					found_main_label = 1;
-					/// TODO set main reserved position
+					main_reserved_position = text_section_bytes;
 					
 				}
 				
@@ -260,7 +260,7 @@ static int assemble(void) {
 typedef struct {
 	uint64_t length, version, invalidated;
 	uint64_t prereserved_count, data_section_element_count;
-	uint64_t reserved_positions_count, main_reserved_position;
+	uint64_t reserved_positions_count, main_reserved_position, text_section_start;
 	
 } rom_meta_section_t;
 
@@ -274,14 +274,13 @@ static int build_rom(void) {
 		.data_section_element_count = data_label_count,
 		
 		.reserved_positions_count = res_pos_label_count,
-		.main_reserved_position = /*main_reserved_position*/ 0x1337,
+		.main_reserved_position = main_reserved_position,
 	};
 	
 	rom_data = (char*) malloc(sizeof(meta));
-	memcpy(rom_data, &meta, sizeof(meta)); // write the meta section to the rom
 	
 	for (uint64_t i = 0; i < data_label_count; i++) { // write the size of each data element
-		rom_data = (char*) realloc(rom_data, rom_bytes = sizeof(meta) + i * sizeof(uint64_t));
+		rom_data = (char*) realloc(rom_data, rom_bytes = sizeof(meta) + i * sizeof(uint64_t) + sizeof(uint64_t));
 		((uint64_t*) rom_data)[rom_bytes / sizeof(uint64_t) - 1] = data_label_identifiers[i].data_label_bytes;
 		
 	} for (uint64_t i = 0; i < data_label_count; i++) { // write each data element to the contiguous data section
@@ -299,9 +298,13 @@ static int build_rom(void) {
 	
 	// write text section
 	
+	meta.text_section_start = rom_bytes;
 	rom_data = (char*) realloc(rom_data, rom_bytes + text_section_bytes);
 	memcpy(rom_data + rom_bytes, text_section_data, text_section_bytes);
 	rom_bytes += text_section_bytes;
+	
+	meta.length = rom_bytes;
+	memcpy(rom_data, &meta, sizeof(meta)); // write the meta section to the rom
 	
 	for (uint64_t i = 0; i < rom_bytes; i++) {
 		printf("%x\t", rom_data[i]);
