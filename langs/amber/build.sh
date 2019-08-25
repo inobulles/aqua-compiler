@@ -5,10 +5,9 @@ set -e
 echo "Compiling code ..."
 python compiler.py
 
-echo "Assembling code ..."
 mv main.asm ../asm/code.asm
 cd ../asm
-sh build.sh
+sh build.sh no-checks
 cd ../amber
 
 exit 0
