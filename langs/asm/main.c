@@ -65,9 +65,12 @@ static inline int64_t assembler_store_token(token_t* self, char* string) {
 	if (warn_too_big && assembler_warnings) printf("WARNING Line %ld, token %s has surpassed the maximum length (%d)\n", current_line_number, self->data, MAX_TOKEN_LENGTH);
 	return self->bytes - 1;
 	
-} static inline int64_t assembler_token_index(uint64_t count, token_t* list, token_t* comparator) { // search through list of tokens and find index of matching token (returns -1 if no match)
-	for (uint64_t i = 0; i < count; i++) if (strcmp(list[i].data, comparator->data) == 0) return i;
+} static inline int64_t assembler_token_index_with_string(uint64_t count, token_t* list, const char* comparator) { // search through list of tokens and find index of matching token (returns -1 if no match)
+	for (uint64_t i = 0; i < count; i++) if (strcmp(list[i].data, comparator) == 0) return i;
 	return -1;
+	
+} static inline int64_t assembler_token_index(uint64_t count, token_t* list, token_t* comparator) {
+	return assembler_token_index_with_string(count, list, (const char*) comparator->data);
 	
 } static inline uint8_t assembler_token_to_number(token_t* self, int64_t* value_reference) { // returns 0 on success
 	char* endptr = (char*) 0;
@@ -236,28 +239,34 @@ static int assemble(void) {
 				else if ((data_label    = assembler_token_index(data_label_count, data_label_identifiers,                                                 &token)) >= 0) assembler_add_token(TOKEN_RESERVED, sizeof(assembler_prereserved) / sizeof(*assembler_prereserved) + data_label);
 				else if ((prereserved   = assembler_token_index(sizeof(assembler_prereserved ) / sizeof(*assembler_prereserved ), assembler_prereserved,  &token)) >= 0) assembler_add_token(TOKEN_RESERVED, prereserved);
 				
-				else if (token.data[1] == '[' || token.data[0] == '[') { /// TODO addresses
-					if (token.data[0] == '8' || token.data[0] == '[') { // 64 bit addressing
-						printf("ADDRESS 8 byte %s\n", token.data);
+				else if (token.data[1] == '?' || token.data[0] == '?') {
+					char* string = (char*) 0;
+					uint8_t token_type = TOKEN_ADDRESS;
+					
+					if (token.data[0] == '8' || token.data[0] == '?') { // 64 bit addressing
+						token_type = TOKEN_ADDRESS;
+						string = token.data[0] == '8' ? token.data + 2 : token.data + 1;
 						
 					} else if (token.data[0] == '1') { // 8 bit addressing
-						printf("ADDRESS 1 byte %s\n", token.data);
+						token_type = TOKEN_BYTE_ADDR;
+						string = token.data + 2;
 						
 					} else {
 						printf("WARNING Line %ld, unknown addressing type %c\n", current_line_number, *current);
 						
 					}
 					
-				} else { // test if maybe this is a number literal
-					int64_t number = 0;
-					if (assembler_token_to_number(&token, &number)) {
-						printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
-						
-					} else {
-						//~ printf("NUMBER %ld\n", number);
-						assembler_add_token(TOKEN_NUMBER, number);
+					if (string) { // create the cla instruction chain (or not if is a single register)
+						if ((_register = assembler_token_index_with_string(sizeof(assembler_registers) / sizeof(*assembler_registers), assembler_registers, string)) >= 0) assembler_add_token(token_type, _register);
+						else printf("WARNING Line %ld, address %s is not a register\n", current_line_number, string);
 						
 					}
+					
+				} else { // test if maybe this is a number literal
+					int64_t number = 0;
+					
+					if (assembler_token_to_number(&token, &number)) printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
+					else assembler_add_token(TOKEN_NUMBER, number);
 					
 				}
 				
@@ -362,7 +371,7 @@ int main(int argc, char* argv[]) {
 			assembler_warnings = 0;
 			if (assembler_verbose) printf("Disabled warnings\n");
 			
-		} else if (strcmp(argv[i], "no-checks") == 0) { /// TODO find "assembler_extra_checks" and see if this is actually used. Otherwise, remove it, obv
+		} else if (strcmp(argv[i], "no-checks") == 0) {
 			assembler_extra_checks = 0;
 			if (assembler_verbose) printf("Disabled extra checks\n");
 			

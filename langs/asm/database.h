@@ -11,8 +11,10 @@
 #define TOKEN_NUMBER      6
 #define TOKEN_BYTE        7
 
+#define REGISTER_AD 3
+
 static token_t assembler_instructions[] = {
-	{"cla"}, {"mov"},
+	{"cad"}, {"mov"},
 	{"cnd"}, {"cmp"},
 	{"jmp"}, {"cal"}, {"ret"},
 	{"psh"}, {"pop"},
