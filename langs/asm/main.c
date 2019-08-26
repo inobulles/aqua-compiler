@@ -106,10 +106,17 @@ static inline void assembler_add_token(uint8_t type, uint64_t data) {
 
 static int assemble(void) {
 	res_pos_label_identifiers = (token_t*) malloc(sizeof(token_t));
-	data_label_identifiers = (token_t*) malloc(sizeof(token_t));
+	data_label_identifiers = (token_t*) malloc(sizeof(token_t) * 2);
+	
+	strcpy(data_label_identifiers[0].data, "default");
+	data_label_identifiers[0].bytes = 7;
+	
+	data_label_identifiers[0].data_label_bytes = 1;
+	data_label_identifiers[0].data_label_array = malloc(data_label_identifiers[0].data_label_bytes);
+	data_label_identifiers[0].data_label_array[0] = 0;
 	
 	res_pos_label_count = 0;
-	data_label_count = 0;
+	data_label_count = 1;
 	
 	token_t* current_data_label = (token_t*) 0;
 	uint8_t in_comment = 0;

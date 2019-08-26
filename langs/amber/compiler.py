@@ -133,7 +133,7 @@ class amber_compiler:
 			if white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
-						if   self.tokens[-1].content in ["if", "func", "class", "return", "while", "break"]: self.tokens[-1].type = self.token.STATEMENT
+						if   self.tokens[-1].content in ["if", "func", "class", "return", "while", "break", "lab", "goto"]: self.tokens[-1].type = self.token.STATEMENT
 						elif self.tokens[-1].content in ["int", "uint", "ftype"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
@@ -309,6 +309,9 @@ class amber_compiler:
 					
 					else:
 						write_code = write_code + "mov g0 0\n" + self.FUNCTION_LEAVE_FORMAT
+				
+				elif current.tokens[0].content == "lab":  write_code = write_code +    ":!amber_label_%s:\n" % current.tokens[1].content # lab statement
+				elif current.tokens[0].content == "goto": write_code = write_code + "jmp !amber_label_%s\n"  % current.tokens[1].content # goto statement
 			
 			elif len(current.tokens) >= 3 and not len(current.tokens) % 1: # operations and chains of arithmetic with expressions
 				first_operator = current.tokens[1]
@@ -320,13 +323,18 @@ class amber_compiler:
 					current.stack_pointer = self.stack_pointer
 					
 					def get_operator_token_precedence(operator):
-						if   operator.content in ["*", "/", "%"]: return 3  # mul/div/mod
-						elif operator.content in ["+", "-"]:      return 4  # add/sub
-						elif operator.content in ["%%", "++"]:    return 5  # string operations
-						elif operator.content[-1] == "=":         return 14 # assignment
+						if   operator.content in ["*", "/", "%"]:        return 3  # mul/div/mod
+						elif operator.content in ["+", "-"]:             return 4  # add/sub
+						elif operator.content in ["<", ">", "<=", ">="]: return 5  # relational operators
+						elif operator.content in ["==", "!="]:           return 6  # equivalency
+						elif operator.content == "&&":                   return 7  # logical and
+						elif operator.content == "||":                   return 8  # logical or
+						elif operator.content in ["%%", "++"]:           return 12 # string operations
+						elif operator.content == "===":                  return 13 # string equivalency
+						elif operator.content[-1] == "=":                return 14 # assignment
 						
-						elif operator.content == "":              return 17
-						else:                                     return 16
+						elif operator.content == "":                     return 17
+						else:                                            return 16
 					
 					old_index = -1
 					
@@ -354,6 +362,7 @@ class amber_compiler:
 							continue
 						
 						instruction = "mov"
+						do_normalize = False
 						
 						if   operator.content[0] == "+": instruction = "add"
 						elif operator.content[0] == "*": instruction = "mul"
@@ -361,15 +370,27 @@ class amber_compiler:
 						elif operator.content[0] == "%": instruction = "mod"
 						elif operator.content[0] == "-": instruction = "sub"
 						
+						elif operator.content[0: 2] == "&&":
+							do_normalize = True
+							instruction = "and"
+						
+						elif operator.content[0: 2] == "||":
+							do_normalize = True
+							instruction = "or"
+						
+						def normalize(string):
+							if do_normalize: return "\tmov g2 1\tcnd %s\tmov g2 0\tmov %s g2" % (string, string)
+							else: return ""
+						
 						if operator.content[-1] == "=":
 							write_code = write_code + current.tokens[min_index + 1].reference("mov g0 ") + "\t" + current.tokens[min_index - 1].reference(instruction + " ") + " g0\t" + current.tokens[min_index - 1].reference("mov g0 ") + "\n"
 						
 						else:
 							if not i:
-								write_code = write_code + current.tokens[min_index - 1].reference("mov g0 ") + "\n"
+								write_code = write_code + current.tokens[min_index - 1].reference("mov g0 ") + normalize("g0") + "\n"
 							
 							if went_left: write_code = write_code + "mov g1 g0\t" + current.tokens[min_index - 1].reference("mov g0 ") + "\t%s g0 g1\n" % instruction
-							else:         write_code = write_code + current.tokens[min_index + 1].reference(instruction + " g0 ") + "\n"
+							else:         write_code = write_code + current.tokens[min_index + 1].reference("mov g1 ") + normalize("g1") + "\n%s g0 g1" % instruction + "\n"
 						
 						operator.content = "\0"
 					
@@ -406,7 +427,7 @@ class amber_compiler:
 			for byte in self.data[i]:
 				self.data_section = self.data_section + " x%x" % ord(byte)
 			
-			self.data_section = self.data_section + " 0%\n"
+			self.data_section = self.data_section + " xa 0%\n"
 	
 	def print_tokens(self, tokens, indent = 0):
 		for token in tokens:
