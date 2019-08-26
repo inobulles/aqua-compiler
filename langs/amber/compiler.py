@@ -35,7 +35,7 @@ class amber_compiler:
 			self.tokens = []
 		
 		def reference(self, encapsulated):
-			if self.stack_pointer >= 0: return "cad bp sub %d;" % self.stack_pointer + encapsulated + "?ad"
+			if self.stack_pointer >= 0: return "cad bp sub %d\t" % self.stack_pointer + encapsulated + "?ad"
 			if self.label_pointer >= 0: return encapsulated + self.label_pointer
 		
 		def copy_reference(self, source):
@@ -75,7 +75,7 @@ class amber_compiler:
 	tokens = []
 	tree = token()
 	data = []
-	text_section = ":main:mov bp sp;sub bp 1024\n"
+	text_section = ":main:\tmov bp sp\tsub bp 1024\n"
 	data_section = ""
 	stack_pointer = 0
 	statement_count = 0
@@ -262,8 +262,7 @@ class amber_compiler:
 					extension_token.tokens = current.tokens[3: len(current.tokens)]
 					
 					write_code = self.compile_token(extension_token, write_code)
-					extension_token_reference = extension_token.reference()
-					write_code = write_code + "%smov g2 %s\ncad bp sub %d\nmov ?ad g2\n" % (extension_token_reference[0], extension_token_reference[1], variable.stack_pointer)
+					write_code = write_code + extension_token.reference("mov g2 ") + "\ncad bp sub %d\tmov ?ad g2\n" % variable.stack_pointer
 				
 				else:
 					write_code = write_code + "cad bp sub %d\nmov ?ad 0\n" % (variable.stack_pointer)
@@ -275,7 +274,7 @@ class amber_compiler:
 					if len(current.tokens) >= 2:
 						extension_token = self.token(self.token.EXPRESSION)
 						extension_token.tokens = current.tokens[1: len(current.tokens)]
-						write_code = self.compile_token(extension_token, write_code) + extension_token.reference("mov g0 ") + ";" + self.FUNCTION_LEAVE_FORMAT
+						write_code = self.compile_token(extension_token, write_code) + extension_token.reference("mov g0 ") + "\t" + self.FUNCTION_LEAVE_FORMAT
 					
 					else:
 						write_code = write_code + "mov g0 0\n" + self.FUNCTION_LEAVE_FORMAT
@@ -336,14 +335,14 @@ class amber_compiler:
 						
 						else:
 							if not i:
-								write_code = write_code + "%smov g0 %s\n" % (current.tokens[min_index - 1].reference()[0], current.tokens[min_index - 1].reference()[1])
+								write_code = write_code + current.tokens[min_index - 1].reference("mov g0 ") + "\n"
 							
 							if went_left: write_code = write_code + "mov g1 g0\nmov g0 %s\n%s g0 g1\n" % (current.tokens[min_index - 1].reference(), instruction)
-							else:         write_code = write_code + "%s g0 %s\n" % (instruction, current.tokens[min_index + 1].reference())
+							else:         write_code = write_code + current.tokens[min_index + 1].reference(instruction + " g0 ") + "\n"
 						
 						operator.content = "\0"
 					
-					write_code = write_code + "%smov %s g0\n" % (current.reference()[0], current.reference()[1])
+					write_code = write_code + current.reference("mov ") + " g0\n"
 					self.stack_pointer += 8
 			
 			elif len(current.tokens) == 1: # nested expressions
