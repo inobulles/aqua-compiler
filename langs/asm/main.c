@@ -337,7 +337,7 @@ static int build_rom(void) {
 	meta.length = rom_bytes;
 	memcpy(rom_data, &meta, sizeof(meta)); // write the meta section to the rom
 	
-	for (uint64_t i = 0; i < rom_bytes; i++) {
+	/*for (uint64_t i = 0; i < rom_bytes; i++) {
 		if (i == sizeof(meta)) printf("\nDATA ELEMENT SIZE SECTION\n");
 		if (i == sizeof(meta) + data_label_count * sizeof(uint64_t)) printf("\nCONTIGUOUS DATA SECTION\n");
 		if (i == res_pos_section_start) printf("\nRESERVED POSITIONS SECTION\n");
@@ -348,7 +348,7 @@ static int build_rom(void) {
 		
 	}
 	
-	printf("\n");
+	printf("\n");*/
 	return 0;
 	
 }

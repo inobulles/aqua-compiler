@@ -34,9 +34,9 @@ class amber_compiler:
 			self.type = type
 			self.tokens = []
 		
-		def reference(self):
-			if self.stack_pointer >= 0: return "[rbp-%d]" % self.stack_pointer
-			if self.label_pointer >= 0: return self.label_pointer
+		def reference(self, encapsulated):
+			if self.stack_pointer >= 0: return "cad bp sub %d;" % self.stack_pointer + encapsulated + "?ad"
+			if self.label_pointer >= 0: return encapsulated + self.label_pointer
 		
 		def copy_reference(self, source):
 			self.stack_pointer = source.stack_pointer
@@ -68,15 +68,14 @@ class amber_compiler:
 		elif string == "uint": return self.variable.UINT
 		else: return self.variable.UNKNOWN
 	
-	FUNCTION_ENTER_FORMAT = "%s: ; WTF\n"
-	FUNCTION_LEAVE_FORMAT = "ret ; WTF\n"
-	ARGUMENT_REGISTERS = ["rdi", "rsi", "rdx", "rcx"]
+	FUNCTION_ENTER_FORMAT = ":%s:\n"
+	FUNCTION_LEAVE_FORMAT = "ret\n"
 	
 	code = ""
 	tokens = []
 	tree = token()
 	data = []
-	text_section = "?_amber_main: ; WTF\n"
+	text_section = ":main:mov bp sp;sub bp 1024\n"
 	data_section = ""
 	stack_pointer = 0
 	statement_count = 0
@@ -206,7 +205,7 @@ class amber_compiler:
 		if not bytes in self.data:
 			self.data.append(bytes)
 		
-		return "?_amber_data_%d" % self.data.index(bytes)
+		return "!amber_data_%d" % self.data.index(bytes)
 	
 	def compile_token(self, current, write_code = text_section): # compile a single token
 		if current.type == self.token.UNKNOWN: # variable, function names, or other user-named stuff
@@ -231,13 +230,13 @@ class amber_compiler:
 				write_code = self.compile_branch(argument, write_code)
 			
 			for i in range(len(current.tokens)):
-				reference = current.tokens[i].reference()
+				reference = current.tokens[i].reference("mov a%d " % i)
 				
 				if reference:
-					write_code = write_code + "mov %s %s ; WTF\n" % (self.ARGUMENT_REGISTERS[i], reference)
+					write_code = write_code + reference + "\n"
 			
 			current.stack_pointer = self.stack_pointer
-			write_code = write_code + "call %s ; FIXME this comment is needed for some reason ; WTF\nmov %s rax ; WTF\n" % (current.call_token.reference(), current.reference())
+			write_code = write_code + current.call_token.reference("cal ") + "\n" + current.reference("mov ") + " g0\n"
 			self.stack_pointer += 8
 		
 		elif current.type == self.token.BLOCK: # blocks
@@ -263,70 +262,23 @@ class amber_compiler:
 					extension_token.tokens = current.tokens[3: len(current.tokens)]
 					
 					write_code = self.compile_token(extension_token, write_code)
-					write_code = write_code + "mov rcx %s ; WTF\nmov [rbp-%d] rcx ; WTF\n" % (extension_token.reference(), variable.stack_pointer)
+					extension_token_reference = extension_token.reference()
+					write_code = write_code + "%smov g2 %s\ncad bp sub %d\nmov ?ad g2\n" % (extension_token_reference[0], extension_token_reference[1], variable.stack_pointer)
 				
 				else:
-					write_code = write_code + "mov [rbp-%d] 0 ; WTF\n" % (variable.stack_pointer)
+					write_code = write_code + "cad bp sub %d\nmov ?ad 0\n" % (variable.stack_pointer)
 				
 				self.variables.append(variable)
 			
 			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT: # statments
-				if current.tokens[0].content == "if": # if statement
-					write_code = self.compile_token(current.tokens[1], write_code)
-					
-					label = "?_amber_statement_%d" % self.statement_count
-					self.statement_count += 1
-					write_code = write_code + "cmp %s 0 ; WTF\ncnd 1 ; WTF\ncall %s ; WTF\n" % (current.tokens[1].reference(), label)
-					
-					code = self.FUNCTION_ENTER_FORMAT % label
-					code = self.compile_token(current.tokens[2], code)
-					write_code = code + self.FUNCTION_LEAVE_FORMAT + write_code
-				
-				elif current.tokens[0].content == "while": # while statement
-					write_code = write_code + "jmp ?_amber_inline_%d_condition ; WTF\n?_amber_inline_%d: ; WTF\n" % (self.inline_count, self.inline_count)
-					write_code = self.compile_token(current.tokens[2], write_code)
-					write_code = write_code + "?_amber_inline_%d_condition: ; WTF\n" % self.inline_count
-					write_code = self.compile_token(current.tokens[1], write_code) + "cmp %s 0 ; WTF\ncnd 1 ; WTF\njmp ?_amber_inline_%d ; WTF\n" % (current.tokens[1].reference(), self.inline_count)
-					self.inline_count += 1
-				
-				elif current.tokens[0].content == "func": # function statement
-					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
-					self.variables.append(variable)
-					self.stack_pointer += 8
-					
-					label = "?_amber_function_%d" % self.function_count
-					variable.label_pointer = label
-					self.function_count += 1
-					write_code = write_code + "mov [rbp-%d] %s ; maybe? ; WTF\n" % (variable.stack_pointer, label)
-					
-					code = self.FUNCTION_ENTER_FORMAT % label
-					for i in range(len(current.tokens[1].tokens)):
-						if len(current.tokens[1].tokens[i].tokens):
-							argument_variable = self.variable(self.depth, current.tokens[1].tokens[i].tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[1].tokens[i].tokens[0].content))
-							self.variables.append(argument_variable)
-							self.stack_pointer += 8
-							code = code + "mov [rbp-%d] %s ; WTF\n" % (argument_variable.stack_pointer, self.ARGUMENT_REGISTERS[i])
-					
-					extension_token = self.token(self.token.EXPRESSION)
-					extension_token.tokens = current.tokens[2: len(current.tokens)]
-					
-					code = self.compile_token(extension_token, code)
-					write_code = code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT + write_code
-				
-				elif current.tokens[0].content == "class": # class statement
-					name = current.tokens[1].content
-					
-					for member in current.tokens[2].tokens[0: -1]:
-						print "type = %s, name = %s, set = %d" % (member.tokens[0].content, member.tokens[1].content, len(member.tokens))
-				
-				elif current.tokens[0].content == "return": # return statement
+				if current.tokens[0].content == "return": # return statement
 					if len(current.tokens) >= 2:
 						extension_token = self.token(self.token.EXPRESSION)
 						extension_token.tokens = current.tokens[1: len(current.tokens)]
-						write_code = self.compile_token(extension_token, write_code) + "mov rax %s ; WTF\n" % extension_token.reference() + self.FUNCTION_LEAVE_FORMAT
+						write_code = self.compile_token(extension_token, write_code) + extension_token.reference("mov g0 ") + ";" + self.FUNCTION_LEAVE_FORMAT
 					
 					else:
-						write_code = write_code + "mov rax 0 ; WTF\n" + self.FUNCTION_LEAVE_FORMAT
+						write_code = write_code + "mov g0 0\n" + self.FUNCTION_LEAVE_FORMAT
 			
 			elif len(current.tokens) >= 3 and not len(current.tokens) % 1: # operations and chains of arithmetic with expressions
 				first_operator = current.tokens[1]
@@ -380,18 +332,18 @@ class amber_compiler:
 						elif operator.content[0] == "-": instruction = "sub"
 						
 						if operator.content[-1] == "=":
-							write_code = write_code + "mov rax %s ; WTF\n%s %s rax ; WTF\n" % (current.tokens[min_index + 1].reference(), instruction, current.tokens[min_index - 1].reference())
+							write_code = write_code + "mov g0 %s\n%s %s g0\n" % (current.tokens[min_index + 1].reference(), instruction, current.tokens[min_index - 1].reference())
 						
 						else:
 							if not i:
-								write_code = write_code + "mov rax %s ; WTF\n" % current.tokens[min_index - 1].reference()
+								write_code = write_code + "%smov g0 %s\n" % (current.tokens[min_index - 1].reference()[0], current.tokens[min_index - 1].reference()[1])
 							
-							if went_left: write_code = write_code + "mov rbx rax ; WTF\nmov rax %s ; WTF\n%s rax rbx ; WTF\n" % (current.tokens[min_index - 1].reference(), instruction)
-							else:         write_code = write_code + "%s rax %s ; WTF\n" % (instruction, current.tokens[min_index + 1].reference())
+							if went_left: write_code = write_code + "mov g1 g0\nmov g0 %s\n%s g0 g1\n" % (current.tokens[min_index - 1].reference(), instruction)
+							else:         write_code = write_code + "%s g0 %s\n" % (instruction, current.tokens[min_index + 1].reference())
 						
 						operator.content = "\0"
 					
-					write_code = write_code + "mov %s rax ; WTF\n" % current.reference()
+					write_code = write_code + "%smov %s g0\n" % (current.reference()[0], current.reference()[1])
 					self.stack_pointer += 8
 			
 			elif len(current.tokens) == 1: # nested expressions
@@ -400,7 +352,7 @@ class amber_compiler:
 		
 		elif current.type == self.token.NUMBER and current.stack_pointer < 0: # number literals
 			current.stack_pointer = self.stack_pointer
-			write_code = write_code + "mov %s %s ; WTF\n" % (current.reference(), current.content)
+			write_code = write_code + current.reference("mov ") + " " + current.content + "\n"
 			self.stack_pointer += 8
 		
 		return write_code
@@ -419,12 +371,12 @@ class amber_compiler:
 	
 	def compile_data(self, data): # check if data is already recorded and create a new entry if not
 		for i in range(len(self.data)):
-			self.data_section = self.data_section + "?_amber_data_%d: db" % i
+			self.data_section = self.data_section + "%%!amber_data_%d " % i
 			
 			for byte in self.data[i]:
-				self.data_section = self.data_section + " %xH" % ord(byte)
+				self.data_section = self.data_section + " x%x" % ord(byte)
 			
-			self.data_section = self.data_section + " 0 ; WTF\n"
+			self.data_section = self.data_section + "%\n"
 	
 	def print_tokens(self, tokens, indent = 0):
 		for token in tokens:
@@ -452,15 +404,7 @@ class amber_compiler:
 		self.compile_data(self.data)
 		print self.data_section
 		
-		return """SECTION .text   align=1 execute                         ; section number 1, code
-""" + self.text_section + "main: ; WTF\nmov rbp rsp ; WTF\nsub rbp 1024 ; WTF\njmp ?_amber_main ; WTF\n" + """SECTION .data   align=1 noexecute                       ; section number 2, data
-
-
-SECTION .bss    align=1 noexecute                       ; section number 3, bss
-
-
-SECTION .rodata align=16 noexecute                      ; section number 4, const
-""" + self.data_section
+		return self.text_section + self.data_section
 
 f = open("src/main.a")
 code = f.read()
