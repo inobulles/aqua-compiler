@@ -262,15 +262,39 @@ class amber_compiler:
 					extension_token.tokens = current.tokens[3: len(current.tokens)]
 					
 					write_code = self.compile_token(extension_token, write_code)
-					write_code = write_code + extension_token.reference("mov g2 ") + "\ncad bp sub %d\tmov ?ad g2\n" % variable.stack_pointer
+					write_code = write_code + extension_token.reference("mov g2 ") + "\tcad bp sub %d\tmov ?ad g2\n" % variable.stack_pointer
 				
 				else:
-					write_code = write_code + "cad bp sub %d\nmov ?ad 0\n" % (variable.stack_pointer)
+					write_code = write_code + "cad bp sub %d\tmov ?ad 0\n" % (variable.stack_pointer)
 				
 				self.variables.append(variable)
 			
 			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT: # statments
-				if current.tokens[0].content == "return": # return statement
+				if current.tokens[0].content == "func": # function statement
+					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
+					self.variables.append(variable)
+					self.stack_pointer += 8
+					
+					label = "!amber_function_%d" % self.function_count
+					variable.label_pointer = label
+					self.function_count += 1
+					write_code = write_code + "cad bp sub %d\tmov ?ad %s\n" % (variable.stack_pointer, label)
+					
+					code = self.FUNCTION_ENTER_FORMAT % label
+					for i in range(len(current.tokens[1].tokens)):
+						if len(current.tokens[1].tokens[i].tokens):
+							argument_variable = self.variable(self.depth, current.tokens[1].tokens[i].tokens[1].content, self.stack_pointer, self.get_type_from_token(current.tokens[1].tokens[i].tokens[0].content))
+							self.variables.append(argument_variable)
+							self.stack_pointer += 8
+							code = code + "cad bp sub %d\tmov ?ad a%d\n" % (argument_variable.stack_pointer, i)
+					
+					extension_token = self.token(self.token.EXPRESSION)
+					extension_token.tokens = current.tokens[2: len(current.tokens)]
+					
+					code = self.compile_token(extension_token, code)
+					write_code = code + "mov g0 0\t" + self.FUNCTION_LEAVE_FORMAT + write_code
+				
+				elif current.tokens[0].content == "return": # return statement
 					if len(current.tokens) >= 2:
 						extension_token = self.token(self.token.EXPRESSION)
 						extension_token.tokens = current.tokens[1: len(current.tokens)]
@@ -375,7 +399,7 @@ class amber_compiler:
 			for byte in self.data[i]:
 				self.data_section = self.data_section + " x%x" % ord(byte)
 			
-			self.data_section = self.data_section + "%\n"
+			self.data_section = self.data_section + " 0%\n"
 	
 	def print_tokens(self, tokens, indent = 0):
 		for token in tokens:
