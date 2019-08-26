@@ -337,7 +337,7 @@ class amber_compiler:
 							if not i:
 								write_code = write_code + current.tokens[min_index - 1].reference("mov g0 ") + "\n"
 							
-							if went_left: write_code = write_code + "mov g1 g0\nmov g0 %s\n%s g0 g1\n" % (current.tokens[min_index - 1].reference(), instruction)
+							if went_left: write_code = write_code + "mov g1 g0\t" + current.tokens[min_index - 1].reference("mov g0 ") + "\t%s g0 g1\n" % instruction
 							else:         write_code = write_code + current.tokens[min_index + 1].reference(instruction + " g0 ") + "\n"
 						
 						operator.content = "\0"
