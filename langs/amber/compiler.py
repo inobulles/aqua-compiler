@@ -331,7 +331,7 @@ class amber_compiler:
 						elif operator.content[0] == "-": instruction = "sub"
 						
 						if operator.content[-1] == "=":
-							write_code = write_code + "mov g0 %s\n%s %s g0\n" % (current.tokens[min_index + 1].reference(), instruction, current.tokens[min_index - 1].reference())
+							write_code = write_code + current.tokens[min_index + 1].reference("mov g0 ") + "\t" + current.tokens[min_index - 1].reference(instruction + " ") + " g0\n"
 						
 						else:
 							if not i:
