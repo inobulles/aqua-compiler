@@ -270,7 +270,14 @@ class amber_compiler:
 				self.variables.append(variable)
 			
 			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT: # statments
-				if current.tokens[0].content == "func": # function statement
+				if current.tokens[0].content == "while": # while statement
+					write_code = write_code + "jmp !amber_inline_%d_condition\t:!amber_inline_%d:\n" % (self.inline_count, self.inline_count)
+					write_code = self.compile_token(current.tokens[2], write_code)
+					write_code = write_code + ":!amber_inline_%d_condition:\n" % self.inline_count
+					write_code = self.compile_token(current.tokens[1], write_code) + current.tokens[1].reference("cmp ") + " 0\tcnd zf\tjmp !amber_inline_%d\n" % self.inline_count
+					self.inline_count += 1
+				
+				elif current.tokens[0].content == "func": # function statement
 					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
 					self.variables.append(variable)
 					self.stack_pointer += 8
