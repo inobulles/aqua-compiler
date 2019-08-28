@@ -29,10 +29,21 @@ class amber_compiler:
 		stack_pointer = -1
 		label_pointer = ""
 		call_token = None
+		unary = None
 		
-		def __init__(self, type = UNKNOWN):
-			self.type = type
-			self.tokens = []
+		def __init__(self, type = UNKNOWN, base = None):
+			if base:
+				self.type = base.type
+				self.tokens = base.tokens
+				self.content = base.content
+				self.call_token = base.call_token
+				self.unary = base.unary
+				self.stack_pointer = base.stack_pointer
+				self.label_pointer = base.label_pointer
+			
+			else:
+				self.type = type
+				self.tokens = []
 		
 		def reference(self, encapsulated):
 			if self.stack_pointer >= 0: return "cad bp sub %d\t" % self.stack_pointer + encapsulated + "?ad"
@@ -98,6 +109,9 @@ class amber_compiler:
 			add_current = False
 			was_operator = False
 			
+			if parsing_operator and not current in "+-*/%=<>!.^&~|?":
+				self.tokens.append(self.token())
+			
 			if parsing_string:
 				if current == '"':
 					parsing_string = False
@@ -105,7 +119,6 @@ class amber_compiler:
 				else: add_current = True
 			elif current in " \n\t;,{}()":
 				white = True
-				print(current)
 			elif current in "+-*/%=<>!.^&~|?":
 				if not parsing_operator:
 					self.tokens.append(self.token())
@@ -123,14 +136,12 @@ class amber_compiler:
 			else:
 				add_current = True
 			
-			if parsing_operator and not was_operator:
-				self.tokens.append(self.token())
-			
 			parsing_operator = was_operator
 			
 			if add_current:
 				self.tokens[-1].content = self.tokens[-1].content + current
-			if white:
+			
+			if white: # end of current token
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
 						if   self.tokens[-1].content in ["if", "func", "class", "return", "while", "break", "continue", "lab", "goto"]: self.tokens[-1].type = self.token.STATEMENT
@@ -140,11 +151,8 @@ class amber_compiler:
 				
 				white_token = True
 				if current == '(':
-					if len(self.tokens) >= 2 and not self.tokens[-2].type in [self.token.OPEN_PARENTHESES, self.token.OPERATOR, self.token.STATEMENT]: # function call
-						self.tokens[-1].type = self.token.FUNCTION_CALL
-					
-					else:
-						self.tokens[-1].type = self.token.OPEN_PARENTHESES
+					if len(self.tokens) >= 2 and not self.tokens[-2].type in [self.token.OPEN_PARENTHESES, self.token.OPERATOR, self.token.STATEMENT]: self.tokens[-1].type = self.token.FUNCTION_CALL # function call
+					else: self.tokens[-1].type = self.token.OPEN_PARENTHESES
 				
 				elif current == ')': self.tokens[-1].type = self.token.CLOSE_PARENTHESES
 				
@@ -166,7 +174,9 @@ class amber_compiler:
 	def build_tree(self, tokens): # AST generator
 		self.tree.tokens.append(self.token(self.token.EXPRESSION))
 		branch_stack = [self.tree, self.tree.tokens[-1]]
-		
+		unary = None
+	
+		previous = None
 		for current in tokens:
 			exit = 0
 			enter = 0
@@ -186,20 +196,30 @@ class amber_compiler:
 				exit = 3
 				enter = 1
 				block = False
+			elif previous and previous.type in [self.token.OPEN_PARENTHESES, self.token.OPEN_BRACES, self.token.FUNCTION_CALL, self.token.OPERATOR, self.token.STATEMENT] and current.type == self.token.OPERATOR:
+				unary = current.content
+				enter = 2
 			else:
 				branch_stack[-1].tokens.append(current)
+			
+			if current.type != self.token.OPERATOR and unary:
+				unary = None
+				exit = 2
 			
 			for i in range(exit):
 				branch_stack.pop(-1)
 			
  			for i in range(enter):
 				branch_stack[-1].tokens.append(self.token(self.token.FUNCTION_CALL if current.type == self.token.FUNCTION_CALL and not i else self.token.BLOCK if block and not i else self.token.EXPRESSION))
+				branch_stack[-1].unary = unary
 				
 				if current.type == self.token.FUNCTION_CALL and not i:
 					branch_stack[-1].tokens[-1].call_token = branch_stack[-1].tokens[-2]
 					branch_stack[-1].tokens.pop(-2)
 				
 				branch_stack.append(branch_stack[-1].tokens[-1])
+			
+			previous = current
 	
 	def add_data(self, bytes):
 		if not bytes in self.data:
@@ -272,10 +292,10 @@ class amber_compiler:
 			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT: # statments
 				if current.tokens[0].content == "if": # if statement
 					current_inline_count = self.inline_count
+					self.inline_count += 1
 					write_code = self.compile_token(current.tokens[1], write_code) + current.tokens[1].reference("cmp ") + " 0\tcnd zf\tjmp !amber_inline_%d_end\n" % (current_inline_count)
 					write_code = self.compile_token(current.tokens[2], write_code)
 					write_code = write_code + ":!amber_inline_%d_end:\n" % current_inline_count
-					self.inline_count += 1
 				
 				elif current.tokens[0].content == "break": # break statement
 					write_code = write_code + "jmp !amber_loop_%d_end\n" % self.loop_count
@@ -285,11 +305,11 @@ class amber_compiler:
 				
 				elif current.tokens[0].content == "while": # while statement
 					current_loop_count = self.loop_count
+					self.loop_count += 1
 					write_code = write_code + "jmp !amber_loop_%d_condition\t:!amber_loop_%d:\n" % (current_loop_count, current_loop_count)
 					write_code = self.compile_token(current.tokens[2], write_code)
 					write_code = write_code + ":!amber_loop_%d_condition:\n" % current_loop_count
 					write_code = self.compile_token(current.tokens[1], write_code) + current.tokens[1].reference("cnd ") + "\tjmp !amber_loop_%d\t:!amber_loop_%d_end:\n" % (current_loop_count, current_loop_count)
-					self.loop_count += 1
 				
 				elif current.tokens[0].content == "func": # function statement
 					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
@@ -339,10 +359,11 @@ class amber_compiler:
 					def get_operator_token_precedence(operator):
 						if   operator.content in ["*", "/", "%"]:        return 3  # mul/div/mod
 						elif operator.content in ["+", "-"]:             return 4  # add/sub
-						elif operator.content in ["<", ">", "<=", ">="]: return 5  # relational operators
-						elif operator.content in ["==", "!="]:           return 6  # equivalency
-						elif operator.content == "&&":                   return 7  # logical and
-						elif operator.content == "||":                   return 8  # logical or
+						elif operator.content in ["<<", ">>"]:           return 5  # shifts
+						elif operator.content in ["<", ">", "<=", ">="]: return 6  # relational operators
+						elif operator.content in ["==", "!="]:           return 7  # equivalency
+						elif operator.content == "&&":                   return 8  # logical and
+						elif operator.content == "||":                   return 9  # logical or
 						elif operator.content in ["%%", "++"]:           return 12 # string operations
 						elif operator.content == "===":                  return 13 # string equivalency
 						elif operator.content[-1] == "=":                return 14 # assignment
@@ -387,7 +408,7 @@ class amber_compiler:
 							instruction = "or"
 						
 						elif operator.content[0: 2] == ">>": instruction = "ror"
-						elif operator.content[0: 2] == "<<": instruction = "lsh"
+						elif operator.content[0: 2] == "<<": instruction = "shl"
 						
 						elif operator.content[0] == "+": instruction = "add"
 						elif operator.content[0] == "*": instruction = "mul"
@@ -420,6 +441,17 @@ class amber_compiler:
 			elif len(current.tokens) == 1: # nested expressions
 				write_code = self.compile_token(current.tokens[0], write_code)
 				current.copy_reference(current.tokens[0])
+				
+				if current.unary:
+					unary_operation_code = "\t"
+					
+					if   current.unary == "~": unary_operation_code = "\tnot g2\t"
+					elif current.unary == "-": unary_operation_code = "\txor g2 x8000000000000000\tadd g2 1\t"
+					elif current.unary == "?": unary_operation_code = "\tmov g2 8?g2\t"
+					elif current.unary == "*": unary_operation_code = "\tmov g2 1?g2\t"
+					else: print current.unary
+					
+					write_code = write_code + current.reference("mov g2 ") + unary_operation_code + current.reference("mov ") + " g2\n"
 		
 		elif current.type == self.token.NUMBER and current.stack_pointer < 0: # number literals
 			current.stack_pointer = self.stack_pointer
