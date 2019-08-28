@@ -27,9 +27,9 @@ Debated features which may not implemented as stated or even implmented at all a
 + elif (else if) and else
 * always (I really like this, but I doubt people would take it very seriously lol. Anyways, I'm also torn on the name. Maybe simply "loop" is a better name?)
 * iterate (used to use this, but even I'm doubting its use, so I don't this this will ever happen)
-+ while
-+ continue
-+ break
+- while
+- continue
+- break
 * break(n) (breaking multiple loops with a single statement, may make the loops compiler too complex)
 * switc... haha no I'm just kidding, I will *try* to never touch one of those ugly bastards ever again
 * do ... while (seriously, what's the point? I'll add it if people want it, but I don't see the point)
@@ -37,7 +37,7 @@ Debated features which may not implemented as stated or even implmented at all a
 - func (functions)
 + class (name spaces)
 - return
-* goto (goto gets too much hate, and I personally love it, but I'm not sure how to make good looking labels)
+- lab and goto
 - declarations
 
 === OPERATIONS ===
@@ -46,13 +46,14 @@ Debated features which may not implemented as stated or even implmented at all a
 - Integer addition (+), subtraction (-), multiplication (*), division (/)
 + Integer modulo (%)
 + Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
-+ Logical and (&&, and), or (||, or)
+- Logical and (&&, and), or (||, or)
 + Logical not (!, not)
 * Logical xor (^^, xor)
 + Unary minus (-)
 * Unary plus (+)
 * Pointer reference (&) and dereference (*) (could use some different operators, such as ? and :)
-+ Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>), two's complement (~)
+- Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>)
++ Two's complement (~)
 * Integer increment (++) and decrement (--)
 + String concatenation (++) and string formatting (%%)
 + String equivalency (===) and non-equivalency (!==) conditions

@@ -78,9 +78,9 @@ class amber_compiler:
 	text_section = ":main:\tmov bp sp\tsub bp 1024\n"
 	data_section = ""
 	stack_pointer = 0
-	statement_count = 0
 	function_count = 0
 	inline_count = 0
+	loop_count = 0
 	variables = []
 	depth = 0
 	
@@ -133,7 +133,7 @@ class amber_compiler:
 			if white:
 				if self.tokens[-1].type != self.token.UNKNOWN or self.tokens[-1].content:
 					if self.tokens[-1].type == self.token.UNKNOWN:
-						if   self.tokens[-1].content in ["if", "func", "class", "return", "while", "break", "lab", "goto"]: self.tokens[-1].type = self.token.STATEMENT
+						if   self.tokens[-1].content in ["if", "func", "class", "return", "while", "break", "continue", "lab", "goto"]: self.tokens[-1].type = self.token.STATEMENT
 						elif self.tokens[-1].content in ["int", "uint", "ftype"]: self.tokens[-1].type = self.token.TYPE
 					
 					self.tokens.append(self.token())
@@ -270,12 +270,26 @@ class amber_compiler:
 				self.variables.append(variable)
 			
 			elif len(current.tokens) >= 1 and current.tokens[0].type == self.token.STATEMENT: # statments
-				if current.tokens[0].content == "while": # while statement
-					write_code = write_code + "jmp !amber_inline_%d_condition\t:!amber_inline_%d:\n" % (self.inline_count, self.inline_count)
+				if current.tokens[0].content == "if": # if statement
+					current_inline_count = self.inline_count
+					write_code = self.compile_token(current.tokens[1], write_code) + current.tokens[1].reference("cmp ") + " 0\tcnd zf\tjmp !amber_inline_%d_end\n" % (current_inline_count)
 					write_code = self.compile_token(current.tokens[2], write_code)
-					write_code = write_code + ":!amber_inline_%d_condition:\n" % self.inline_count
-					write_code = self.compile_token(current.tokens[1], write_code) + current.tokens[1].reference("cmp ") + " 0\tcnd zf\tjmp !amber_inline_%d\n" % self.inline_count
+					write_code = write_code + ":!amber_inline_%d_end:\n" % current_inline_count
 					self.inline_count += 1
+				
+				elif current.tokens[0].content == "break": # break statement
+					write_code = write_code + "jmp !amber_loop_%d_end\n" % self.loop_count
+				
+				elif current.tokens[0].content == "continue": # continue statement
+					write_code = write_code + "jmp !amber_loop_%d_condition\n" % self.loop_count
+				
+				elif current.tokens[0].content == "while": # while statement
+					current_loop_count = self.loop_count
+					write_code = write_code + "jmp !amber_loop_%d_condition\t:!amber_loop_%d:\n" % (current_loop_count, current_loop_count)
+					write_code = self.compile_token(current.tokens[2], write_code)
+					write_code = write_code + ":!amber_loop_%d_condition:\n" % current_loop_count
+					write_code = self.compile_token(current.tokens[1], write_code) + current.tokens[1].reference("cnd ") + "\tjmp !amber_loop_%d\t:!amber_loop_%d_end:\n" % (current_loop_count, current_loop_count)
+					self.loop_count += 1
 				
 				elif current.tokens[0].content == "func": # function statement
 					variable = self.variable(self.depth, current.tokens[1].call_token.content, self.stack_pointer, self.variable.FUNCTION)
@@ -364,13 +378,7 @@ class amber_compiler:
 						instruction = "mov"
 						do_normalize = False
 						
-						if   operator.content[0] == "+": instruction = "add"
-						elif operator.content[0] == "*": instruction = "mul"
-						elif operator.content[0] == "/": instruction = "div"
-						elif operator.content[0] == "%": instruction = "mod"
-						elif operator.content[0] == "-": instruction = "sub"
-						
-						elif operator.content[0: 2] == "&&":
+						if operator.content[0: 2] == "&&":
 							do_normalize = True
 							instruction = "and"
 						
@@ -378,8 +386,20 @@ class amber_compiler:
 							do_normalize = True
 							instruction = "or"
 						
+						elif operator.content[0: 2] == ">>": instruction = "ror"
+						elif operator.content[0: 2] == "<<": instruction = "lsh"
+						
+						elif operator.content[0] == "+": instruction = "add"
+						elif operator.content[0] == "*": instruction = "mul"
+						elif operator.content[0] == "/": instruction = "div"
+						elif operator.content[0] == "%": instruction = "mod"
+						elif operator.content[0] == "-": instruction = "sub"
+						elif operator.content[0] == "|": instruction = "or "
+						elif operator.content[0] == "&": instruction = "and"
+						elif operator.content[0] == "^": instruction = "xor"
+						
 						def normalize(string):
-							if do_normalize: return "\tmov g2 1\tcnd %s\tmov g2 0\tmov %s g2" % (string, string)
+							if do_normalize: return "\tmov g2 0\tcnd %s\tmov g2 1\tmov %s g2" % (string, string)
 							else: return ""
 						
 						if operator.content[-1] == "=":
@@ -389,7 +409,7 @@ class amber_compiler:
 							if not i:
 								write_code = write_code + current.tokens[min_index - 1].reference("mov g0 ") + normalize("g0") + "\n"
 							
-							if went_left: write_code = write_code + "mov g1 g0\t" + current.tokens[min_index - 1].reference("mov g0 ") + "\t%s g0 g1\n" % instruction
+							if went_left: write_code = write_code + "mov g1 g0\t" + current.tokens[min_index - 1].reference("mov g0 ") + "\t%s g0 g1\n" % instruction + "\n"
 							else:         write_code = write_code + current.tokens[min_index + 1].reference("mov g1 ") + normalize("g1") + "\n%s g0 g1" % instruction + "\n"
 						
 						operator.content = "\0"
