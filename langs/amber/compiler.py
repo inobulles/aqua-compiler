@@ -211,7 +211,7 @@ class amber_compiler:
 			
  			for i in range(enter):
 				branch_stack[-1].tokens.append(self.token(self.token.FUNCTION_CALL if current.type == self.token.FUNCTION_CALL and not i else self.token.BLOCK if block and not i else self.token.EXPRESSION))
-				branch_stack[-1].unary = unary
+				branch_stack[-1].unary = unary if i else None
 				
 				if current.type == self.token.FUNCTION_CALL and not i:
 					branch_stack[-1].tokens[-1].call_token = branch_stack[-1].tokens[-2]
@@ -440,7 +440,9 @@ class amber_compiler:
 			
 			elif len(current.tokens) == 1: # nested expressions
 				write_code = self.compile_token(current.tokens[0], write_code)
-				current.copy_reference(current.tokens[0])
+				current.stack_pointer = self.stack_pointer
+				write_code = write_code + current.tokens[0].reference("mov g2 ") + "\t" + current.reference("mov ") + " g2\n"
+				self.stack_pointer += 8
 				
 				if current.unary:
 					unary_operation_code = "\t"
