@@ -1,5 +1,8 @@
 
-/// HEAVILY BASED ON https://github.com/yihui-he/c0-compiler
+/* BASED ON
+ * https://github.com/yihui-he/c0-compiler
+ * http://ftp.mozgan.me/Compiler_Manuals/LexAndYaccTutorial.pdf
+ */
 
 D   [0-9]
 NZ  [1-9]
@@ -22,46 +25,37 @@ WS  [ \t\v\n\f]
 %}
 
 %%
-"/*" { comment(); } // comments
-"//".* {}
+"/*" comment(); // comments
+"//".*
 
-"if"     { return IF; } // statement keywords
-"else"   { return ELSE; }
-"while"  { return WHILE; }
-"goto"   { return GOTO; }
-"lab"    { return LAB; }
-"return" { return RETURN; }
-"void"   { return VOID; }
+"if"     return IF; // statement keywords
+"else"   return ELSE;
+"goto"   return GOTO;
+"lab"    return LAB;
+"print"  return PRINT;
+"return" return RETURN;
+"var"    return VAR;
 
-"int"    { yylval.str = strdup(yytext); return INT; } // type keywords
+"+" return '+';
+"-" return '-';
+"*" return '*';
+"/" return '/';
 
-"+"  { return PLUS; } // operators
-"-"  { return MINUS; } 
-"*"  { return STAR; } 
-"/"  { return SLASH; } 
-"<"  { return LT; } 
-"<=" { return LE; } 
-">"  { return GT; } 
-">=" { return GE; } 
-"==" { return EQUAL; } 
-"!=" { return NEQUAL; } 
-"="  { return ASSIGN; } 
+"=" return '=';
+";" return ';';
 
-("[") { return LSQUAR; } // tree control
-("]") { return RSQUAR; }
-("{") { return LBRACE; }
-("}") { return RBRACE; }
+"{" return '{';
+"}" return '}';
+"[" return '[';
+"]" return ']';
+"(" return '(';
+")" return ')';
 
-";"   { return SEMI; }
-","   { return COMMA; }
-"("   { return LPAREN; }
-")"   { return RPAREN; }
-
-{L}{A}* { return ID; } // literals
+{L}{A}* { yylval.str = strdup(yytext); return IDENTIFIER; } // literals
 {D}+ { yylval.str = strdup(yytext); return NUMBER; }
 
-{WS}+ {} // white spaces and other tokens
-.     {}
+{WS}+ // white spaces and other tokens
+.
 %%
 
 #include <stdio.h>

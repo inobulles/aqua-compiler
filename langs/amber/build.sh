@@ -2,7 +2,7 @@
 #!/bin/sh
 set -e
 
-echo "Compiling code ..."
+#~ echo "Compiling code ..."
 #~ python compiler.py
 
 flex compiler.l

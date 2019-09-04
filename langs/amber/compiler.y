@@ -1,6 +1,4 @@
 
-/// HEAVILY BASED ON https://github.com/yihui-he/c0-compiler
-
 %{
 	#include <ctype.h>
 	#include <stdio.h>
@@ -16,11 +14,18 @@
 	
 	extern int yylineno;
 	
-	#define STR(VAR) (#VAR)
-	
-	char* none = "none";
-	char* integer = "int";
-	char* assign = "=";
+	#define GRAMMAR_PROGRAM 0
+	#define GRAMMAR_STATEMENT
+	#define GRAMMAR_PRINT
+	#define GRAMMAR_VAR_DECLARATION
+	#define GRAMMAR_STATEMENT_LIST
+	#define GRAMMAR_NUMBER
+	#define GRAMMAR_IDENTIFIER
+	#define GRAMMAR_UNARY_MINUS
+	#define GRAMMAR_
+	#define GRAMMAR_
+	#define GRAMMAR_
+	#define GRAMMAR_
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -28,41 +33,27 @@
 		int child_count;
 		struct node_s* children[MAX_CHILDREN];
 		
-		char* type, *string, *value, *data_type;
+		int type;
+		char* data;
 		int line;
 		
 	} node_t;
 	
-	int indent = 0;
-	void print_node(node_t* node) {
-		printf("%d<Tree lineNo=\"%d\" nodeType=\"%s\" string=\"%s\" value=\"%s\" dataType=\"%s\">\n", 
-		indent,
-		node->line,
-		node->type,
-		node->string,
-		node->value, 
-		node->data_type);
-	int i;
-	if (node->child_count > 0){
-		indent++;
-		printf("%d<Child>\n", indent);
-		for (i=0;i<node->child_count;i++){
-			print_node(node->children[i]);
+	void compile(node_t* node) {
+		
+		
+		if (node->child_count > 0) for (int i = 0; i < node->child_count; i++) {
+			compile(node->children[i]);
+			
 		}
-		indent--;
-		printf("%d</Child>\n", indent);
-	}
-	printf("%d</Tree>\n", indent);
 		
 	}
 	
-	node_t* new_node(int line, char* type, char* string, char* value, char* data_type, int child_count, ...) {
+	node_t* new_node(int line, int type, char* data, int child_count, ...) {
 		node_t* self = (node_t*) malloc(sizeof(node_t));
 		
 		self->type = type;
-		self->string = string;
-		self->value = value;
-		self->data_type = data_type;
+		self->data = data;
 		self->line = line;
 		self->child_count = child_count;
 		
@@ -89,181 +80,50 @@
 	struct node_s* ast;
 }
 
-%token IF ELSE WHILE GOTO LAB RETURN VOID
-%token INT
-%token PLUS MINUS STAR SLASH LT LE GT GE EQUAL NEQUAL ASSIGN
-%token LSQUAR RSQUAR LBRACE RBRACE
-%token SEMI COMMA LPAREN RPAREN
-%token <str> ID NUMBER
-%token LETTER DIGIT
+%token IF GOTO LAB RETURN VAR PRINT
+%nonassoc IFX
+%nonassoc ELSE
+
+%token <str> IDENTIFIER NUMBER
 %token NONTOKEN ERROR ENDFILE
 
-%left PLUS MINUS
-%left STAR SLASH
+%nonassoc UMINUS
 
-%type<ast> atree program external_declaration var_declaration init_declarator_list fun_declaration params_list compound_stmt declarator params block_item_list block_item factor call term additive_expression simple_expression /*unary_expression postfix_expression*/ assignment_expression return_stmt while_stmt if_stmt expression statement args expression_stmt
-%type<str> relop declaration_specifiers
+%left '+' '-'
+%left '*' '/'
 
-%start atree
+%type<ast> program statement statement_list expression
+
+%start program
 %%
-
-atree:program { print_node($1); }
-
-program 
-	: external_declaration {$$=$1;}
-	| program external_declaration {$$=new_node(yylineno, STR(program), none, none, none, 2, $1, $2); }
-	;
-
-external_declaration
-	: var_declaration {$$=$1;}
-	| fun_declaration {$$=$1;}
-	;
-
-var_declaration
-	: declaration_specifiers init_declarator_list SEMI 
-	{$$=new_node(yylineno, "var_declaration", none, none, $1, 1, $2); }
-	;
-
-init_declarator_list
-	: ID {$$ = new_node(yylineno, "init_declarator_list", $1, none, none, 0);}
-	| ID ASSIGN expression {$$ = new_node(yylineno,"init_declarator_list", $1, none, none,  1, $3);}
-	| init_declarator_list COMMA ID {$$ = new_node(yylineno,"init_declarator_list", $3, none, none,  1, $1);}
-	;
-
-declarator
-	: LPAREN RPAREN {$$ = new_node(yylineno,"declarator", none, none, none,  0);}
-	| LPAREN params RPAREN {$$ = new_node(yylineno,"declarator", none, none, none,  1, $2);}
-	;
-
-fun_declaration
-	: declaration_specifiers ID declarator compound_stmt {$$=new_node(yylineno,STR(fun_declaration), $2, none, $1,  1, $4);}
-	;
-
-declaration_specifiers
-	: INT {$$=integer;}
-	;
-
-params_list
-	: INT ID {$$ = new_node(yylineno,"params_list", $2, none, integer,  0);}
-	| params_list COMMA INT ID {$$ = new_node(yylineno,"params_list", $4, none, integer,  1, $1);}
-	;
-
-params
-	: params_list {$$=$1;}
-	| VOID {$$ = new_node(yylineno,"params", none, none, "VOID",  0);}
-	;
-	
-compound_stmt
-	: LBRACE RBRACE {$$ = new_node(yylineno,"compound_stmt", none, none, none,  0);}
-	| LBRACE block_item_list RBRACE {$$ = $2;}
-	;
-
-block_item_list
-	: block_item {$$ = $1;}
-	| block_item_list block_item {$$ = new_node(yylineno,"block_item_list", none, none, none,  2, $1, $2);}
-	;
-
-block_item
-	: var_declaration {$$=$1;}
-	| statement {$$=$1;}
+program
+	: statement_list { $$ = new_node(yylineno, GRAMMAR_PROGRAM, "", 1, $1); compile($$); }
 	;
 
 statement
-	: expression_stmt {$$=$1;}
-	| compound_stmt {$$=$1;}
-	| if_stmt {$$=$1;}
-	| while_stmt {$$=$1;}
-	| return_stmt {$$=$1;}
+	: ';' { $$ = new_node(yylineno, GRAMMAR_STATEMENT, "", 0); }
+	| expression ';' { $$ = $1; }
+	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, "", 1, $2); }
+	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, $2, 1, $4); }
+	| '{' '}' { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, "", 0); }
+	| '{' statement_list '}' { $$ = $2; }
 	;
 
-expression_stmt
-	: SEMI {$$ = new_node(yylineno,"expression_stmt", none, none, none,  0);}
-	| expression SEMI {$$=$1;}
+statement_list
+	: statement { $$ = $1; }
+	| statement_list statement { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, "", 2, $1, $2); }
 	;
 
-if_stmt
-	: IF LPAREN expression RPAREN statement ELSE statement {$$ = new_node(yylineno,"if_stmt", none, none, none,  3, $3, $5, $7);}
-	| IF LPAREN expression RPAREN statement {$$ = new_node(yylineno,"if_stmt", none, none, none,  2, $3, $5);}
-	;
-
-while_stmt
-	: WHILE LPAREN expression RPAREN statement {$$ = new_node(yylineno,"while_stmt", none, none, none,  2, $3, $5);}
-	;
-
-return_stmt
-	: RETURN SEMI {$$ = new_node(yylineno,"return_stmt", none, none, none,  0);}
-	| RETURN expression SEMI {$$ = new_node(yylineno,"return_stmt", none, none, none,  1, $2);}
-	;
-	
 expression
-	: assignment_expression {$$=$1;}
-	| simple_expression {$$=$1;}
+	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, $1, 0); }
+	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, $1, 0); }
+	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY_MINUS, "", 1, $2); }
+	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_PLUS, "", 2, $1, $3); }
+	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_MINUS, "", 2, $1, $3); }
+	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_TIMES, "", 2, $1, $3); }
+	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_DIVIDE, "", 2, $1, $3); }
+	| '(' expression ')' { $$ = $2; }
 	;
-
-/*assignment_expression
-	: ID ASSIGN expression {$$ = new_node(yylineno,"assignment_expression", $1, none, none,  1, $3);}
-	| unary_expression  {$$=$1;}    ;*/
-
-assignment_expression
-	: ID ASSIGN expression {$$ = new_node(yylineno,"assignment_expression", $1, none, none,  1, $3);}
-	;
-
-/*unary_expression 
-	: INC_OP ID {$$ = new_node(yylineno,"unary_expression", $2, none, "++",  0);}
-	| DEC_OP ID {$$ = new_node(yylineno,"unary_expression", $2, none, "--",  0);}
-	| postfix_expression {$$=$1;}
-	;
-
-postfix_expression
-	: ID INC_OP {$$ = new_node(yylineno,"postfix_expression", $1, none, "++",  0);}
-	| ID DEC_OP {$$ = new_node(yylineno,"postfix_expression", $1, none, "--",  0);}
-	;*/
-
-simple_expression
-	: additive_expression {$$=$1;}
-	| additive_expression relop additive_expression {$$ = new_node(yylineno,"simple_expression", none, none, $2,  2, $1, $3);}
-	;
-
-relop 
-	: LT     {$$ = "<";}
-	| LE     {$$ = "<=";}
-	| GT     {$$ = ">";}
-	| GE     {$$ = ">=";}
-	| EQUAL  {$$ = "==";}
-	| NEQUAL {$$ = "!=";}
-	;
-
-additive_expression
-	: term {$$=$1;}
-	| additive_expression PLUS term {$$ = new_node(yylineno,"additive_expression", none, none, "+",  2, $1, $3);}
-	| additive_expression MINUS term {$$ = new_node(yylineno,"additive_expression", none, none, "-",  2, $1, $3);}
-	| PLUS additive_expression %prec STAR {$$ = new_node(yylineno,"additive_expression", none, none, "+",  1, $2);}
-	| MINUS additive_expression %prec STAR {$$ = new_node(yylineno,"additive_expression", none, none, "-",  1, $2);}
-	;
-
-term
-	: factor {$$=$1;}
-	| term STAR factor {$$ = new_node(yylineno,"term", none, none, "*",  2, $1, $3);}
-	| term SLASH factor {$$ = new_node(yylineno,"term", none, none, "/",  2, $1, $3);}
-	;
-
-factor
-	: LPAREN expression RPAREN {$$=$2;}
-	| ID {$$ = new_node(yylineno,"factor", $1, none, none,  0);}
-	| call {$$=$1;}
-	| NUMBER {$$ = new_node(yylineno,"factor", none, $1, none,  0);}
-	;
-	
-call
-	: ID LPAREN RPAREN {$$ = new_node(yylineno,"call", $1, none, none,  0);}
-	| ID LPAREN args RPAREN {$$ = new_node(yylineno,"call", $1, none, none,  1, $3);}
-	;
-
-args
-	: expression {$$=$1;}
-	| expression COMMA args {$$ = new_node(yylineno,"args", none, none, none,  2, $1, $3);}
-	;
-
 %%
 
 #include <stdio.h>
@@ -280,9 +140,12 @@ int main(int argc, char* argv[]) {
 		if (!file) {
 			fprintf(stderr, "failed open");
 			exit(1);
+			
 		}
+		
 		yyin = file;
 	}
+	
 	yyparse();
 	return 0; 
 }
