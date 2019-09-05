@@ -53,6 +53,7 @@ WS  [ \t\v\n\f]
 
 {L}{A}* { yylval.str = strdup(yytext); return IDENTIFIER; } // literals
 {D}+ { yylval.str = strdup(yytext); return NUMBER; }
+L?\"(\\.|[^\\"])*\" { yylval.str = strndup(yytext, strlen(yytext) - 1); return STRING; }
 
 {WS}+ // white spaces and other tokens
 .

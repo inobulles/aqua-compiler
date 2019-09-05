@@ -15,17 +15,19 @@
 	extern int yylineno;
 	
 	#define GRAMMAR_PROGRAM 0
-	#define GRAMMAR_STATEMENT
-	#define GRAMMAR_PRINT
-	#define GRAMMAR_VAR_DECLARATION
-	#define GRAMMAR_STATEMENT_LIST
-	#define GRAMMAR_NUMBER
-	#define GRAMMAR_IDENTIFIER
-	#define GRAMMAR_UNARY_MINUS
-	#define GRAMMAR_
-	#define GRAMMAR_
-	#define GRAMMAR_
-	#define GRAMMAR_
+	#define GRAMMAR_STATEMENT 1
+	#define GRAMMAR_PRINT 2
+	#define GRAMMAR_VAR_DECLARATION 3
+	#define GRAMMAR_STATEMENT_LIST 4
+	#define GRAMMAR_NUMBER 5
+	#define GRAMMAR_IDENTIFIER 6
+	#define GRAMMAR_UNARY_MINUS 7
+	#define GRAMMAR_PLUS 8
+	#define GRAMMAR_MINUS 9
+	#define GRAMMAR_TIMES 10
+	#define GRAMMAR_DIVIDE 11
+	#define GRAMMAR_RETURN 12
+	#define GRAMMAR_STRING 13
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -33,17 +35,34 @@
 		int child_count;
 		struct node_s* children[MAX_CHILDREN];
 		
-		int type;
-		char* data;
-		int line;
+		char* ref, *data;
+		int type, line;
 		
 	} node_t;
 	
-	void compile(node_t* node) {
+	static int data_section_count = 0;
+	void compile(node_t* self) {
+		for (int i = 0; i < self->child_count; i++) compile(self->children[i]);
 		
-		
-		if (node->child_count > 0) for (int i = 0; i < node->child_count; i++) {
-			compile(node->children[i]);
+		if (self->type == GRAMMAR_NUMBER) {
+			self->ref = self->data;
+			
+		} else if (self->type == GRAMMAR_STRING) {
+			self->ref = (char*) malloc(64);
+			memset(self->ref, 0, 64);
+			sprintf(self->ref, "$amber_data_%d", data_section_count++);
+			
+			printf("%%%s", self->ref);
+			for (int i = 0; i < strlen(self->data) + 1; i++) printf(" x%x", self->data[i]);
+			printf("%%\n");
+			
+		} else if (self->type == GRAMMAR_PRINT) {
+			if (self->child_count) printf("mov a0 %s\tcal print\n", self->children[0]->ref);
+			else printf("mov a0 0\tcal print\n");
+			
+		} else if (self->type == GRAMMAR_RETURN) {
+			if (self->child_count) printf("mov g0 %s\tret\n", self->children[0]->ref);
+			else printf("mov g0 0\nret\n");
 			
 		}
 		
@@ -84,7 +103,7 @@
 %nonassoc IFX
 %nonassoc ELSE
 
-%token <str> IDENTIFIER NUMBER
+%token <str> IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
 
 %nonassoc UMINUS
@@ -104,6 +123,7 @@ statement
 	: ';' { $$ = new_node(yylineno, GRAMMAR_STATEMENT, "", 0); }
 	| expression ';' { $$ = $1; }
 	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, "", 1, $2); }
+	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN,"", 1, $2); }
 	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, $2, 1, $4); }
 	| '{' '}' { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, "", 0); }
 	| '{' statement_list '}' { $$ = $2; }
@@ -116,6 +136,7 @@ statement_list
 
 expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, $1, 0); }
+	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, $1, 0); }
 	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY_MINUS, "", 1, $2); }
 	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_PLUS, "", 2, $1, $3); }
