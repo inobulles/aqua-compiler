@@ -21,11 +21,8 @@
 	#define GRAMMAR_STATEMENT_LIST 4
 	#define GRAMMAR_NUMBER 5
 	#define GRAMMAR_IDENTIFIER 6
-	#define GRAMMAR_UNARY_MINUS 7
-	#define GRAMMAR_PLUS 8
-	#define GRAMMAR_MINUS 9
-	#define GRAMMAR_TIMES 10
-	#define GRAMMAR_DIVIDE 11
+	#define GRAMMAR_UNARY 7
+	#define GRAMMAR_OPERATION 8
 	#define GRAMMAR_RETURN 12
 	#define GRAMMAR_STRING 13
 	
@@ -113,11 +110,11 @@ expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, $1, 0); }
-	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY_MINUS, "", 1, $2); }
-	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_PLUS, "", 2, $1, $3); }
-	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_MINUS, "", 2, $1, $3); }
-	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_TIMES, "", 2, $1, $3); }
-	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_DIVIDE, "", 2, $1, $3); }
+	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY, "-", 1, $2); }
+	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "+", 2, $1, $3); }
+	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "-", 2, $1, $3); }
+	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "*", 2, $1, $3); }
+	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "/", 2, $1, $3); }
 	| '(' expression ')' { $$ = $2; }
 	;
 %%
@@ -156,6 +153,8 @@ void compile(node_t* self) {
 	for (int i = 0; i < self->child_count; i++) compile(self->children[i]);
 	depth--;
 	
+	// literals
+	
 	if (self->type == GRAMMAR_NUMBER) {
 		self->ref = self->data;
 		
@@ -183,6 +182,8 @@ void compile(node_t* self) {
 		
 	}
 	
+	// statements
+	
 	else if (self->type == GRAMMAR_VAR_DECLARATION) {
 		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
 		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
@@ -194,9 +195,7 @@ void compile(node_t* self) {
 		stack_pointer += 8;
 		reference_count++;
 		
-	}
-	
-	else if (self->type == GRAMMAR_PRINT) {
+	} else if (self->type == GRAMMAR_PRINT) {
 		if (self->child_count) printf("%smov a0 %s\tcal print\n", self->children[0]->ref_code, self->children[0]->ref);
 		else printf("mov a0 0\tcal print\n");
 		
@@ -204,8 +203,31 @@ void compile(node_t* self) {
 		if (self->child_count) printf("%smov g0 %s\tret\n", self->children[0]->ref_code, self->children[0]->ref);
 		else printf("mov g0 0\nret\n");
 		
-	} else if (self->type == GRAMMAR_PROGRAM) {
-		printf("mov g0 0\nret\n");
+	}
+	
+	// operations
+	
+	else if (self->type == GRAMMAR_OPERATION) {
+		self->ref_code = (char*) malloc(64);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+		self->ref = "?ad";
+		
+		char* operator_instruction = "nop";
+		
+		if (self->data[0] == '+') operator_instruction = "add";
+		else if (self->data[0] == '-') operator_instruction = "sub";
+		else if (self->data[0] == '*') operator_instruction = "mul";
+		else if (self->data[0] == '/') operator_instruction = "div";
+		
+		printf("%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, operator_instruction, self->children[1]->ref, self->ref_code, self->ref);
+		stack_pointer += 8;
+		
+	}
+	
+	// misc
+	
+	else if (self->type == GRAMMAR_PROGRAM) {
+		printf("mov g0 0\tret\n");
 		
 	}
 	
