@@ -25,6 +25,8 @@
 	#define GRAMMAR_OPERATION 8
 	#define GRAMMAR_RETURN 12
 	#define GRAMMAR_STRING 13
+	#define GRAMMAR_LOGIC 14
+	#define GRAMMAR_ULOGIC 15
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -78,10 +80,11 @@
 %token <str> IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
 
-%nonassoc UMINUS
+%nonassoc UBDEREF UDEREF UREF UMINUS UPLUS
 
 %left '+' '-'
 %left '*' '/'
+%left '?' '&'
 
 %type<ast> program statement statement_list expression
 
@@ -110,7 +113,11 @@ expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, $1, 0); }
+	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, "*", 1, $2); }
+	| '?' expression %prec UDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, "?", 1, $2); }
+	| '&' expression %prec UREF { $$ = new_node(yylineno, GRAMMAR_UNARY, "&", 1, $2); }
 	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY, "-", 1, $2); }
+	| '+' expression %prec UPLUS { $$ = $2; }
 	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "*", 2, $1, $3); }
@@ -143,7 +150,7 @@ static int depth = 0;
 
 void compile(node_t* self) {
 	depth++;
-	printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
+	//~ printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
 	
 	if (self->type == GRAMMAR_PROGRAM) {
 		printf(":main:\tmov bp sp\tsub bp 1024\n");
@@ -220,6 +227,22 @@ void compile(node_t* self) {
 		else if (self->data[0] == '/') operator_instruction = "div";
 		
 		printf("%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, operator_instruction, self->children[1]->ref, self->ref_code, self->ref);
+		stack_pointer += 8;
+		
+	} else if (self->type == GRAMMAR_UNARY) {
+		self->ref_code = (char*) malloc(64);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+		self->ref = "?ad";
+		
+		char* unary_code = "nop g0";
+		
+		if (self->data[0] == '-') unary_code = "xor g0 x8000000000000000";
+		else if (self->data[0] == '~') unary_code = "not g0";
+		else if (self->data[0] == '*') unary_code = "mov g0 1?g0";
+		else if (self->data[0] == '?') unary_code = "mov g0 8?g0";
+		else if (self->data[0] == '&') unary_code = "mov g0 ad";
+		
+		printf("%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, unary_code, self->ref_code, self->ref);
 		stack_pointer += 8;
 		
 	}
