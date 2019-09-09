@@ -23,6 +23,7 @@
 	#define GRAMMAR_IDENTIFIER 6
 	#define GRAMMAR_UNARY 7
 	#define GRAMMAR_OPERATION 8
+	#define GRAMMAR_STROP 9
 	#define GRAMMAR_RETURN 12
 	#define GRAMMAR_STRING 13
 	#define GRAMMAR_LOGIC 14
@@ -35,17 +36,18 @@
 		struct node_s* children[MAX_CHILDREN];
 		
 		char* ref, *ref_code, *data;
-		int type, line;
+		int data_bytes, type, line;
 		
 	} node_t;
 	
 	void compile(node_t* self);
 	
-	node_t* new_node(int line, int type, char* data, int child_count, ...) {
+	node_t* new_node(int line, int type, int data_bytes, char* data, int child_count, ...) {
 		node_t* self = (node_t*) malloc(sizeof(node_t));
 		
 		self->type = type;
 		self->data = data;
+		self->data_bytes = data_bytes;
 		self->line = line;
 		self->ref_code = "";
 		self->child_count = child_count;
@@ -70,6 +72,7 @@
 
 %union {
 	char* str;
+	struct { char* data; int bytes; } data;
 	struct node_s* ast;
 }
 
@@ -77,11 +80,13 @@
 %nonassoc IFX
 %nonassoc ELSE
 
-%token <str> IDENTIFIER NUMBER STRING
+%token <str> IDENTIFIER NUMBER
+%token <data> STRING
 %token NONTOKEN ERROR ENDFILE
 
 %nonassoc UBDEREF UDEREF UREF UMINUS UPLUS
 
+%left STROP_CAT STROP_FOR
 %left '+' '-'
 %left '*' '/'
 %left '?' '&'
@@ -91,37 +96,39 @@
 %start program
 %%
 program
-	: statement_list { $$ = new_node(yylineno, GRAMMAR_PROGRAM, "", 1, $1); compile($$); }
+	: statement_list { $$ = new_node(yylineno, GRAMMAR_PROGRAM, 0, "", 1, $1); compile($$); }
 	;
 
 statement
-	: ';' { $$ = new_node(yylineno, GRAMMAR_STATEMENT, "", 0); }
+	: ';' { $$ = new_node(yylineno, GRAMMAR_STATEMENT, 0, "", 0); }
 	| expression ';' { $$ = $1; }
-	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, "", 1, $2); }
-	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN,"", 1, $2); }
-	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, $2, 1, $4); }
-	| '{' '}' { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, "", 0); }
+	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, 0, "", 1, $2); }
+	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN, 0, "", 1, $2); }
+	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
+	| '{' '}' { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 0); }
 	| '{' statement_list '}' { $$ = $2; }
 	;
 
 statement_list
 	: statement { $$ = $1; }
-	| statement_list statement { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, "", 2, $1, $2); }
+	| statement_list statement { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 2, $1, $2); }
 	;
 
 expression
-	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, $1, 0); }
-	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1, 0); }
-	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, $1, 0); }
-	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, "*", 1, $2); }
-	| '?' expression %prec UDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, "?", 1, $2); }
-	| '&' expression %prec UREF { $$ = new_node(yylineno, GRAMMAR_UNARY, "&", 1, $2); }
-	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY, "-", 1, $2); }
+	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
+	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
+	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
+	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
+	| '?' expression %prec UDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "?", 1, $2); }
+	| '&' expression %prec UREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "&", 1, $2); }
+	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "-", 1, $2); }
 	| '+' expression %prec UPLUS { $$ = $2; }
-	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "+", 2, $1, $3); }
-	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "-", 2, $1, $3); }
-	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "*", 2, $1, $3); }
-	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, "/", 2, $1, $3); }
+	| expression STROP_CAT expression { $$ = new_node(yylineno, GRAMMAR_STROP, 0, "+", 2, $1, $3); }
+	| expression STROP_FOR expression { $$ = new_node(yylineno, GRAMMAR_STROP, 0, "%", 2, $1, $3); }
+	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "+", 2, $1, $3); }
+	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "-", 2, $1, $3); }
+	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "*", 2, $1, $3); }
+	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "/", 2, $1, $3); }
 	| '(' expression ')' { $$ = $2; }
 	;
 %%
@@ -148,12 +155,14 @@ static reference_t* references = (reference_t*) 0;
 static int data_section_count = 0;
 static int depth = 0;
 
+static int has_defined_internal_send = 0;
+
 void compile(node_t* self) {
 	depth++;
 	//~ printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
 	
 	if (self->type == GRAMMAR_PROGRAM) {
-		printf(":main:\tmov bp sp\tsub bp 1024\n");
+		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
 		
 	}
 	
@@ -170,9 +179,9 @@ void compile(node_t* self) {
 		memset(self->ref, 0, 64);
 		sprintf(self->ref, "$amber_data_%d", data_section_count++);
 		
-		printf("%%%s", self->ref);
-		for (int i = 1; i < strlen(self->data) + 1; i++) printf(" x%x", self->data[i]);
-		printf("%%\n");
+		fprintf(yyout, "%%%s", self->ref);
+		for (int i = 0; i < self->data_bytes; i++) fprintf(yyout, " x%x", self->data[i]);
+		fprintf(yyout, "%%\n");
 		
 	} else if (self->type == GRAMMAR_IDENTIFIER) {
 		for (int i = 0; i < reference_count; i++) {
@@ -197,18 +206,18 @@ void compile(node_t* self) {
 		
 		memset(&references[reference_count], 0, sizeof(reference_t));
 		strncpy(references[reference_count].identifier, self->data, sizeof(references[reference_count].identifier));
-		printf("%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, references[reference_count].stack_pointer = stack_pointer);
+		fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, references[reference_count].stack_pointer = stack_pointer);
 		
 		stack_pointer += 8;
 		reference_count++;
 		
 	} else if (self->type == GRAMMAR_PRINT) {
-		if (self->child_count) printf("%smov a0 %s\tcal print\n", self->children[0]->ref_code, self->children[0]->ref);
-		else printf("mov a0 0\tcal print\n");
+		if (self->child_count) fprintf(yyout, "%smov a0 %s\tcal print\n", self->children[0]->ref_code, self->children[0]->ref);
+		else fprintf(yyout, "mov a0 0\tcal print\n");
 		
 	} else if (self->type == GRAMMAR_RETURN) {
-		if (self->child_count) printf("%smov g0 %s\tret\n", self->children[0]->ref_code, self->children[0]->ref);
-		else printf("mov g0 0\nret\n");
+		if (self->child_count) fprintf(yyout, "%smov g0 %s\tret\n", self->children[0]->ref_code, self->children[0]->ref);
+		else fprintf(yyout, "mov g0 0\nret\n");
 		
 	}
 	
@@ -226,7 +235,7 @@ void compile(node_t* self) {
 		else if (self->data[0] == '*') operator_instruction = "mul";
 		else if (self->data[0] == '/') operator_instruction = "div";
 		
-		printf("%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, operator_instruction, self->children[1]->ref, self->ref_code, self->ref);
+		fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, operator_instruction, self->children[1]->ref, self->ref_code, self->ref);
 		stack_pointer += 8;
 		
 	} else if (self->type == GRAMMAR_UNARY) {
@@ -236,13 +245,44 @@ void compile(node_t* self) {
 		
 		char* unary_code = "nop g0";
 		
-		if (self->data[0] == '-') unary_code = "xor g0 x8000000000000000";
+		if (self->data[0] == '-') unary_code = "xor g0 x8000000000000000\tadd g0 1";
 		else if (self->data[0] == '~') unary_code = "not g0";
 		else if (self->data[0] == '*') unary_code = "mov g0 1?g0";
 		else if (self->data[0] == '?') unary_code = "mov g0 8?g0";
 		else if (self->data[0] == '&') unary_code = "mov g0 ad";
 		
-		printf("%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, unary_code, self->ref_code, self->ref);
+		fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, unary_code, self->ref_code, self->ref);
+		stack_pointer += 8;
+		
+	} else if (self->type == GRAMMAR_STROP) {
+		self->ref_code = (char*) malloc(64);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+		self->ref = "?ad";
+		
+		char* strop_code = "";
+		
+		if (self->data[0] == '+') {
+			if (!has_defined_internal_send) {
+				has_defined_internal_send = 1;
+				fprintf(yyout,
+					"jmp $amber_internal_send_end\t:$amber_internal_send:\n"
+					"\tjmp $amber_internal_send_cond\t:$amber_internal_send_loop:\n"
+					"\t\tadd a0 1\n"
+					"\t\t:$amber_internal_send_cond:\tcnd 1?a0\tjmp $amber_internal_send_loop\tret\t:$amber_internal_send_end:\n");
+				
+			}
+			
+			strop_code =
+				"mov g2 g0\tmov a0 g2\tcal $amber_internal_send\tmov g3 a0\tsub g3 g0\n"
+				"mov a0 g1\tcal $amber_internal_send\tmov a3 a0\tsub a3 g1\tadd a3 1\n"
+				"mov a0 g3\tadd a0 a3\tcal malloc\n"
+				"mov a0 g0\tmov a1 g2\tmov a2 g3\tcal mcpy\n"
+				"add a0 g3\tmov a1 g1\tmov a2 a3\tcal mcpy\n"
+				"mov g0 a0\tsub g0 g3\n";
+			
+		}
+		
+		fprintf(yyout, "%smov g0 %s\t%smov g1 %s\n%s%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, strop_code, self->ref_code, self->ref);
 		stack_pointer += 8;
 		
 	}
@@ -250,7 +290,7 @@ void compile(node_t* self) {
 	// misc
 	
 	else if (self->type == GRAMMAR_PROGRAM) {
-		printf("mov g0 0\tret\n");
+		fprintf(yyout, "mov g0 0\tret\n");
 		
 	}
 	
@@ -266,8 +306,24 @@ int main(int argc, char* argv[]) {
 		}
 		
 		yyin = file;
+		yyout = stdout;
+		
+		if (argc > 2) {
+			FILE* file = fopen(argv[2], "w");
+			if (!file) {
+				fprintf(stderr, "failed open");
+				exit(1);
+				
+			}
+			
+			yyout = file;
+			
+		}
+		
 	}
 	
 	yyparse();
+	fclose(yyout);
+	system("geany main.asm");
 	return 0; 
 }

@@ -1,7 +1,7 @@
 
-/* BASED ON
- * https://github.com/yihui-he/c0-compiler
+/* DOCUMENTATION
  * http://ftp.mozgan.me/Compiler_Manuals/LexAndYaccTutorial.pdf
+ * https://github.com/yihui-he/c0-compiler
  */
 
 D   [0-9]
@@ -19,12 +19,34 @@ WS  [ \t\v\n\f]
 	
 	#include "y.tab.h"
 	
+	char string_buffer[100];
+	char* string;
+	
 	int yywrap(void);
-	void printToken(char* type) { fprintf(yyout,"  <token line=\"%d\" type=\"%s\" string=\"%s\" />\n", yylineno, type, yytext); }
 	static void comment(void);
 %}
 
+%x LEX_STRING
+
 %%
+\" { BEGIN LEX_STRING; string = string_buffer; }
+<LEX_STRING>\\n { *string++ = '\n'; }
+<LEX_STRING>\\t { *string++ = '\t'; }
+<LEX_STRING>\\b { *string++ = '\b'; }
+<LEX_STRING>\\r { *string++ = '\r'; }
+<LEX_STRING>\\0 { *string++ = '\0'; }
+<LEX_STRING>\\\\ { *string++ = '\\'; }
+<LEX_STRING>\\\" { *string++ = '"'; }
+<LEX_STRING>\" {
+	BEGIN 0;
+	*string++ = 0;
+	yylval.data.bytes = string - string_buffer;
+	yylval.data.data = malloc(yylval.data.bytes);
+	memcpy(yylval.data.data, string_buffer, yylval.data.bytes);
+	return STRING;
+}
+<LEX_STRING>. { *string++ = *yytext; }
+
 "/*" comment(); // comments
 "//".*
 
@@ -35,6 +57,9 @@ WS  [ \t\v\n\f]
 "print"  return PRINT;
 "return" return RETURN;
 "var"    return VAR;
+
+"++" return STROP_CAT; // string operations
+"%%" return STROP_FOR;
 
 "+" return '+';
 "-" return '-';
@@ -55,7 +80,6 @@ WS  [ \t\v\n\f]
 
 {L}{A}* { yylval.str = strdup(yytext); return IDENTIFIER; } // literals
 {D}+ { yylval.str = strdup(yytext); return NUMBER; }
-L?\"(\\.|[^\\"])*\" { yylval.str = strndup(yytext, strlen(yytext) - 1); return STRING; }
 
 {WS}+ // white spaces and other tokens
 .
