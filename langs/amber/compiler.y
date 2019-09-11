@@ -177,6 +177,19 @@ void compile(node_t* self) {
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
 		
+	} else if (self->type == GRAMMAR_WHILE) {
+		uint64_t current_inline_id = inline_id++;
+		fprintf(yyout, "jmp $amber_inline_%ld_condition\t:$amber_inline_%ld:\n", current_inline_id, current_inline_id);
+		
+		compile(self->children[1]); // compile statement
+		fprintf(yyout, ":$amber_inline_%ld_condition:", current_inline_id);
+		
+		compile(self->children[0]); // compile expression
+		fprintf(yyout, "%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", self->children[0]->ref_code, self->children[0]->ref, current_inline_id, current_inline_id);
+		
+		depth--;
+		return;
+		
 	} else if (self->type == GRAMMAR_IF) {
 		compile(self->children[0]); // compile expression
 		
