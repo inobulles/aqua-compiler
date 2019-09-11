@@ -30,6 +30,8 @@
 	#define GRAMMAR_ULOGIC 15
 	#define GRAMMAR_IF 16
 	#define GRAMMAR_IFELSE 17
+	#define GRAMMAR_ASSIGN 18
+	#define GRAMMAR_WHILE 19
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -78,7 +80,7 @@
 	struct node_s* ast;
 }
 
-%token IF GOTO LAB RETURN VAR PRINT
+%token IF WHILE GOTO LAB RETURN VAR PRINT
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -88,6 +90,7 @@
 
 %nonassoc UBDEREF UDEREF UREF UMINUS UPLUS
 
+%left '='
 %left STROP_CAT STROP_FOR
 %left '+' '-'
 %left '*' '/'
@@ -107,6 +110,7 @@ statement
 	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, 0, "", 1, $2); }
 	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN, 0, "", 1, $2); }
 	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
+	| WHILE '(' expression ')' statement { $$ = new_node(yylineno, GRAMMAR_WHILE, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(yylineno, GRAMMAR_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(yylineno, GRAMMAR_IFELSE, 0, "", 3, $3, $5, $7); }
 	| '{' '}' { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 0); }
@@ -122,6 +126,8 @@ expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
+	| '*' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "*", 2, $2, $4); }
+	| '?' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "?", 2, $2, $4); }
 	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
 	| '?' expression %prec UDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "?", 1, $2); }
 	| '&' expression %prec UREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "&", 1, $2); }
@@ -133,6 +139,7 @@ expression
 	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "*", 2, $1, $3); }
 	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "/", 2, $1, $3); }
+	| expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "=", 2, $1, $3); }
 	| '(' expression ')' { $$ = $2; }
 	;
 %%
@@ -256,7 +263,18 @@ void compile(node_t* self) {
 	
 	// operations
 	
-	else if (self->type == GRAMMAR_OPERATION) {
+	else if (self->type == GRAMMAR_ASSIGN) {
+		self->ref_code = (char*) malloc(64);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+		self->ref = "?ad";
+		
+		if (self->data[0] == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		else if (self->data[0] == '*') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 1?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		else if (self->data[0] == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		
+		stack_pointer += 8;
+		
+	} else if (self->type == GRAMMAR_OPERATION) {
 		self->ref_code = (char*) malloc(64);
 		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
 		self->ref = "?ad";
