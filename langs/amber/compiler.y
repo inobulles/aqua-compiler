@@ -28,6 +28,8 @@
 	#define GRAMMAR_STRING 13
 	#define GRAMMAR_LOGIC 14
 	#define GRAMMAR_ULOGIC 15
+	#define GRAMMAR_IF 16
+	#define GRAMMAR_IFELSE 17
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -105,6 +107,8 @@ statement
 	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, 0, "", 1, $2); }
 	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN, 0, "", 1, $2); }
 	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
+	| IF '(' expression ')' statement %prec IFX { $$ = new_node(yylineno, GRAMMAR_IF, 0, "", 2, $3, $5); }
+	| IF '(' expression ')' statement ELSE statement { $$ = new_node(yylineno, GRAMMAR_IFELSE, 0, "", 3, $3, $5, $7); }
 	| '{' '}' { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 0); }
 	| '{' statement_list '}' { $$ = $2; }
 	;
@@ -152,6 +156,8 @@ static uint64_t stack_pointer = 0;
 static uint64_t reference_count = 0;
 static reference_t* references = (reference_t*) 0;
 
+static uint64_t inline_id = 0;
+
 static int data_section_count = 0;
 static int depth = 0;
 
@@ -163,6 +169,33 @@ void compile(node_t* self) {
 	
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
+		
+	} else if (self->type == GRAMMAR_IF) {
+		compile(self->children[0]); // compile expression
+		
+		uint64_t current_inline_id = inline_id++;
+		fprintf(yyout, "jmp $amber_inline_%ld_condition\t:$amber_inline_%ld:\n", current_inline_id, current_inline_id);
+		
+		compile(self->children[1]); // compile statement
+		fprintf(yyout, "jmp $amber_inline_%ld_end\t:$amber_inline_%ld_condition:\t%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", current_inline_id, current_inline_id, self->children[0]->ref_code, self->children[0]->ref, current_inline_id, current_inline_id);
+		
+		depth--;
+		return;
+		
+	} else if (self->type == GRAMMAR_IFELSE) {
+		compile(self->children[0]); // compile expression
+		
+		uint64_t current_inline_id = inline_id++;
+		fprintf(yyout, "jmp $amber_inline_%ld_condition\t:$amber_inline_%ld:\n", current_inline_id, current_inline_id);
+		
+		compile(self->children[1]); // compile statement (after if expression)
+		fprintf(yyout, "jmp $amber_inline_%ld_end\t:$amber_inline_%ld_condition:\t%scnd %s\tjmp $amber_inline_%ld\n", current_inline_id, current_inline_id, self->children[0]->ref_code, self->children[0]->ref, current_inline_id);
+		
+		compile(self->children[2]); // compile statement (after else)
+		fprintf(yyout, ":$amber_inline_%ld_end:\n", current_inline_id);
+		
+		depth--;
+		return;
 		
 	}
 	
