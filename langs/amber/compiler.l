@@ -53,6 +53,7 @@ WS  [ \t\v\n\f]
 "if"     return IF; // statement keywords
 "else"   return ELSE;
 "while"  return WHILE;
+"func"   return FUNC;
 "goto"   return GOTO;
 "lab"    return LAB;
 "print"  return PRINT;
@@ -71,6 +72,7 @@ WS  [ \t\v\n\f]
 
 "=" return '=';
 ";" return ';';
+"," return ',';
 
 "{" return '{';
 "}" return '}';

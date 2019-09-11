@@ -32,6 +32,9 @@
 	#define GRAMMAR_IFELSE 17
 	#define GRAMMAR_ASSIGN 18
 	#define GRAMMAR_WHILE 19
+	#define GRAMMAR_FUNC 20
+	#define GRAMMAR_CALL 21
+	#define GRAMMAR_EXPRESSION_LIST 22
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -80,7 +83,7 @@
 	struct node_s* ast;
 }
 
-%token IF WHILE GOTO LAB RETURN VAR PRINT
+%token FUNC IF WHILE GOTO LAB RETURN VAR PRINT
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -96,7 +99,7 @@
 %left '*' '/'
 %left '?' '&'
 
-%type<ast> program statement statement_list expression
+%type<ast> program statement statement_list expression expression_list
 
 %start program
 %%
@@ -109,6 +112,7 @@ statement
 	| expression ';' { $$ = $1; }
 	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, 0, "", 1, $2); }
 	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN, 0, "", 1, $2); }
+	| FUNC IDENTIFIER statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 1, $3); }
 	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
 	| WHILE '(' expression ')' statement { $$ = new_node(yylineno, GRAMMAR_WHILE, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(yylineno, GRAMMAR_IF, 0, "", 2, $3, $5); }
@@ -123,9 +127,11 @@ statement_list
 	;
 
 expression
-	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
+	| NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
+	| IDENTIFIER '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 0); }
+	| '(' expression ')' '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $2); }
 	| '*' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "*", 2, $2, $4); }
 	| '?' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "?", 2, $2, $4); }
 	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
@@ -133,14 +139,19 @@ expression
 	| '&' expression %prec UREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "&", 1, $2); }
 	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "-", 1, $2); }
 	| '+' expression %prec UPLUS { $$ = $2; }
+	| expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "=", 2, $1, $3); }
 	| expression STROP_CAT expression { $$ = new_node(yylineno, GRAMMAR_STROP, 0, "+", 2, $1, $3); }
 	| expression STROP_FOR expression { $$ = new_node(yylineno, GRAMMAR_STROP, 0, "%", 2, $1, $3); }
 	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "*", 2, $1, $3); }
 	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "/", 2, $1, $3); }
-	| expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "=", 2, $1, $3); }
 	| '(' expression ')' { $$ = $2; }
+	;
+
+expression_list
+	: expression { $$ = $1; }
+	| expression_list ',' expression { $$ = new_node(yylineno, GRAMMAR_EXPRESSION_LIST, 0, "", 2, $1, $2); }
 	;
 %%
 
@@ -176,6 +187,25 @@ void compile(node_t* self) {
 	
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
+		
+	} else if (self->type == GRAMMAR_FUNC) {
+		fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
+		
+		compile(self->children[0]); // compile statement
+		fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
+		
+		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
+		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+		
+		memset(&references[reference_count], 0, sizeof(reference_t));
+		strncpy(references[reference_count].identifier, self->data, sizeof(references[reference_count].identifier));
+		fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", references[reference_count].stack_pointer = stack_pointer, self->data);
+		
+		stack_pointer += 8;
+		reference_count++;
+		
+		depth--;
+		return;
 		
 	} else if (self->type == GRAMMAR_WHILE) {
 		uint64_t current_inline_id = inline_id++;
@@ -276,7 +306,17 @@ void compile(node_t* self) {
 	
 	// operations
 	
-	else if (self->type == GRAMMAR_ASSIGN) {
+	else if (self->type == GRAMMAR_CALL) {
+		self->ref_code = (char*) malloc(64);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+		self->ref = "?ad";
+		
+		if (*self->data) fprintf(yyout, "cal %s\t%smov %s g0\n", self->data, self->ref_code, self->ref);
+		else fprintf(yyout, "%scal %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		
+		stack_pointer += 8;
+		
+	} else if (self->type == GRAMMAR_ASSIGN) {
 		self->ref_code = (char*) malloc(64);
 		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
 		self->ref = "?ad";
