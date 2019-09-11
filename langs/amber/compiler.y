@@ -127,11 +127,13 @@ statement_list
 	;
 
 expression
-	| NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
+	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
 	| IDENTIFIER '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 0); }
 	| '(' expression ')' '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $2); }
+	| IDENTIFIER '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 1, $3); }
+	| '(' expression ')' '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 2, $2, $5); }
 	| '*' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "*", 2, $2, $4); }
 	| '?' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "?", 2, $2, $4); }
 	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
@@ -151,7 +153,7 @@ expression
 
 expression_list
 	: expression { $$ = $1; }
-	| expression_list ',' expression { $$ = new_node(yylineno, GRAMMAR_EXPRESSION_LIST, 0, "", 2, $1, $2); }
+	| expression ',' expression_list { $$ = new_node(yylineno, GRAMMAR_EXPRESSION_LIST, 0, "", 2, $1, $3); }
 	;
 %%
 
@@ -310,6 +312,25 @@ void compile(node_t* self) {
 		self->ref_code = (char*) malloc(64);
 		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
 		self->ref = "?ad";
+		
+		node_t* expression_list_root = (node_t*) 0;
+		int argument = 0;
+		
+		if (*self->data && self->child_count == 1) expression_list_root = self->children[0];
+		else if (!*self->data && self->child_count == 2) expression_list_root = self->children[1];
+		
+		while (expression_list_root) {
+			if (expression_list_root->type == GRAMMAR_EXPRESSION_LIST) {
+				fprintf(yyout, "%smov a%d %s\t", expression_list_root->children[0]->ref_code, argument++, expression_list_root->children[0]->ref);
+				expression_list_root = expression_list_root->children[1];
+				
+			} else {
+				fprintf(yyout, "%smov a%d %s\t", expression_list_root->ref_code, argument++, expression_list_root->ref);
+				break;
+				
+			}
+			
+		}
 		
 		if (*self->data) fprintf(yyout, "cal %s\t%smov %s g0\n", self->data, self->ref_code, self->ref);
 		else fprintf(yyout, "%scal %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
