@@ -417,7 +417,7 @@ void compile(node_t* self) {
 		generate_ref_code(self);
 		char* unary_code = "nop g0";
 		
-		if (self->data[0] == '-') unary_code = "xor g0 x8000000000000000\tadd g0 1";
+		if (self->data[0] == '-') unary_code = "not g0\tadd g0 1";
 		else if (self->data[0] == '~') unary_code = "not g0";
 		else if (self->data[0] == '*') unary_code = "mov g0 1?g0";
 		else if (self->data[0] == '?') unary_code = "mov g0 8?g0";
