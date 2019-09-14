@@ -117,6 +117,7 @@ statement
 	| FUNC IDENTIFIER statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 1, $3); }
 	| FUNC IDENTIFIER '(' argument_list ')' statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 2, $6, $4); }
 	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
+	| VAR IDENTIFIER ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 0); }
 	| WHILE '(' expression ')' statement { $$ = new_node(yylineno, GRAMMAR_WHILE, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(yylineno, GRAMMAR_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(yylineno, GRAMMAR_IFELSE, 0, "", 3, $3, $5, $7); }
@@ -330,7 +331,11 @@ void compile(node_t* self) {
 		
 		memset(&references[reference_count], 0, sizeof(reference_t));
 		strncpy(references[reference_count].identifier, self->data, sizeof(references[reference_count].identifier));
-		fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, references[reference_count].stack_pointer = stack_pointer);
+		
+		if (self->child_count) {
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, references[reference_count].stack_pointer = stack_pointer);
+			
+		}
 		
 		stack_pointer += 8;
 		reference_count++;
@@ -371,9 +376,26 @@ void compile(node_t* self) {
 			
 		}
 		
-		if (*self->data) fprintf(yyout, "cal %s\t%smov %s g0\n", self->data, self->ref_code, self->ref);
-		else fprintf(yyout, "%scal %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		if (*self->data) {
+			if (strcmp(self->data, "str") == 0) {
+				uint64_t current_inline_id = inline_id++;
+				
+				fprintf(yyout,
+					"mov g1 a0\tmov a0 16\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tadd a0 a2\n"
+					":$amber_internal_itos_loop_inline_%ld:\tsub a0 1\tdiv g1 10\tadd a3 48\tmov 1?a0 a3\n"
+					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\tmov g0 a0\n", current_inline_id, current_inline_id);
+				
+			} else {
+				fprintf(yyout, "cal %s\t", self->data, self->ref_code, self->ref);
+				
+			}
+			
+		} else {
+			fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
+			
+		}
 		
+		fprintf(yyout, "%smov %s g0\n", self->ref_code, self->ref);
 		stack_pointer += 8;
 		
 	} else if (self->type == GRAMMAR_ASSIGN) {
