@@ -35,6 +35,8 @@
 	#define GRAMMAR_FUNC 20
 	#define GRAMMAR_CALL 21
 	#define GRAMMAR_EXPRESSION_LIST 22
+	#define GRAMMAR_ARGUMENT 23
+	#define GRAMMAR_ARGUMENT_LIST 24
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -99,7 +101,7 @@
 %left '*' '/'
 %left '?' '&'
 
-%type<ast> program statement statement_list expression expression_list
+%type<ast> program statement statement_list expression expression_list argument argument_list
 
 %start program
 %%
@@ -113,6 +115,7 @@ statement
 	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, 0, "", 1, $2); }
 	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN, 0, "", 1, $2); }
 	| FUNC IDENTIFIER statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 1, $3); }
+	| FUNC IDENTIFIER '(' argument_list ')' statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 2, $6, $4); }
 	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
 	| WHILE '(' expression ')' statement { $$ = new_node(yylineno, GRAMMAR_WHILE, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(yylineno, GRAMMAR_IF, 0, "", 2, $3, $5); }
@@ -155,6 +158,15 @@ expression_list
 	: expression { $$ = $1; }
 	| expression ',' expression_list { $$ = new_node(yylineno, GRAMMAR_EXPRESSION_LIST, 0, "", 2, $1, $3); }
 	;
+
+argument
+	: VAR IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_ARGUMENT, 0, $2, 0); }
+	;
+
+argument_list
+	: argument { $$ = $1; }
+	| argument ',' argument_list { $$ = new_node(yylineno, GRAMMAR_ARGUMENT_LIST, 0, "", 2, $1, $3); }
+	;
 %%
 
 #include <stdio.h>
@@ -192,6 +204,33 @@ void compile(node_t* self) {
 		
 	} else if (self->type == GRAMMAR_FUNC) {
 		fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
+		
+		if (self->child_count > 1) { // has arguments
+			node_t* expression_list_root = self->children[1];
+			int argument = 0;
+			
+			while (expression_list_root) {
+				if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
+				else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+				
+				memset(&references[reference_count], 0, sizeof(reference_t));
+				strncpy(references[reference_count].identifier, expression_list_root->type == GRAMMAR_ARGUMENT_LIST ? expression_list_root->children[0]->data : expression_list_root->data, sizeof(references[reference_count].identifier));
+				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", references[reference_count].stack_pointer = stack_pointer, argument++);
+				
+				stack_pointer += 8;
+				reference_count++;
+				
+				if (expression_list_root->type == GRAMMAR_ARGUMENT_LIST) {
+					expression_list_root = expression_list_root->children[1];
+					
+				} else {
+					break;
+					
+				}
+				
+			}
+			
+		}
 		
 		compile(self->children[0]); // compile statement
 		fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
