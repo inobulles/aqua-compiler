@@ -187,6 +187,7 @@ void yyerror(const char* string) {
 typedef struct {
 	char identifier[64];
 	uint64_t stack_pointer;
+	int scope_depth;
 	
 } reference_t;
 
@@ -208,11 +209,13 @@ uint64_t create_reference(char* identifier) {
 	memset(&references[reference_count], 0, sizeof(reference_t));
 	strncpy(references[reference_count].identifier, identifier, sizeof(references[reference_count].identifier));
 	
+	references[reference_count].scope_depth = depth;
 	references[reference_count].stack_pointer = stack_pointer;
+	
 	stack_pointer += 8;
 	return references[reference_count++].stack_pointer;
 	
-} uint64_t generate_ref_code(node_t* self) {
+} uint64_t generate_stack_entry(node_t* self) {
 	self->ref_code = (char*) malloc(64);
 	sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
 	self->ref = "?ad";
@@ -221,16 +224,22 @@ uint64_t create_reference(char* identifier) {
 	stack_pointer += 8;
 	return current_stack_pointer;
 	
+} void decrement_depth(void) {
+	for (int i = 0; i < reference_count; i++) if (references[i].scope_depth > depth + 1) references[i].scope_depth = -1;
+	depth--;
+	
 }
 
 void compile(node_t* self) {
 	depth++;
+	//~ printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
 	
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
 		
 	} else if (self->type == GRAMMAR_FUNC) {
 		fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
+		depth++;
 		
 		if (self->child_count > 1) { // has arguments
 			node_t* expression_list_root = self->children[1];
@@ -246,6 +255,7 @@ void compile(node_t* self) {
 			
 		}
 		
+		decrement_depth();
 		compile(self->children[0]); // compile statement
 		
 		fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
@@ -297,7 +307,7 @@ void compile(node_t* self) {
 	}
 	
 	for (int i = 0; i < self->child_count; i++) compile(self->children[i]);
-	depth--;
+	decrement_depth();
 	
 	// literals
 	
@@ -315,7 +325,7 @@ void compile(node_t* self) {
 		
 	} else if (self->type == GRAMMAR_IDENTIFIER) {
 		for (int i = 0; i < reference_count; i++) {
-			if (strncmp(references[i].identifier, self->data, sizeof(references[i].identifier)) == 0) {
+			if (references[i].scope_depth >= 0 && strncmp(references[i].identifier, self->data, sizeof(references[i].identifier)) == 0) {
 				self->ref_code = (char*) malloc(64);
 				sprintf(self->ref_code, "cad bp sub %ld\t", references[i].stack_pointer);
 				
@@ -347,7 +357,7 @@ void compile(node_t* self) {
 	// operations
 	
 	else if (self->type == GRAMMAR_CALL) {
-		generate_ref_code(self);
+		generate_stack_entry(self);
 		
 		node_t* expression_list_root = (node_t*) 0;
 		int argument = 0;
@@ -390,20 +400,20 @@ void compile(node_t* self) {
 		fprintf(yyout, "%smov %s g0\n", self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMMAR_ASSIGN) {
-		generate_ref_code(self);
+		generate_stack_entry(self);
 		
 		if (self->data[0] == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '*') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 1?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMMAR_CMPOP) {
-		generate_ref_code(self);
+		generate_stack_entry(self);
 		
 		if (self->data[0] == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMMAR_OPERATION) {
-		generate_ref_code(self);
+		generate_stack_entry(self);
 		char* operator_instruction = "nop";
 		
 		if (self->data[0] == '+') operator_instruction = "add";
@@ -414,7 +424,7 @@ void compile(node_t* self) {
 		fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, operator_instruction, self->children[1]->ref, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMMAR_UNARY) {
-		generate_ref_code(self);
+		generate_stack_entry(self);
 		char* unary_code = "nop g0";
 		
 		if (self->data[0] == '-') unary_code = "not g0\tadd g0 1";
@@ -426,7 +436,7 @@ void compile(node_t* self) {
 		fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, unary_code, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMMAR_STROP) {
-		generate_ref_code(self);
+		generate_stack_entry(self);
 		char* strop_code = "";
 		
 		if (self->data[0] == '+') {
@@ -491,6 +501,6 @@ int main(int argc, char* argv[]) {
 	
 	yyparse();
 	fclose(yyout);
-	//~ system("geany main.asm");
+	system("geany main.asm");
 	return 0; 
 }
