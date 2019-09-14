@@ -37,6 +37,7 @@
 	#define GRAMMAR_EXPRESSION_LIST 22
 	#define GRAMMAR_ARGUMENT 23
 	#define GRAMMAR_ARGUMENT_LIST 24
+	#define GRAMMAR_CMPOP 25
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -96,6 +97,8 @@
 %nonassoc UBDEREF UDEREF UREF UMINUS UPLUS
 
 %left '='
+%left CMPOP_EQ CMPOP_NEQ
+%left STROP_EQ STROP_NEQ
 %left STROP_CAT STROP_FOR
 %left '+' '-'
 %left '*' '/'
@@ -146,6 +149,8 @@ expression
 	| '-' expression %prec UMINUS { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "-", 1, $2); }
 	| '+' expression %prec UPLUS { $$ = $2; }
 	| expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "=", 2, $1, $3); }
+	| expression CMPOP_EQ expression { $$ = new_node(yylineno, GRAMMAR_CMPOP, 0, "=", 2, $1, $3); }
+	| expression CMPOP_NEQ expression { $$ = new_node(yylineno, GRAMMAR_CMPOP, 0, "!", 2, $1, $3); }
 	| expression STROP_CAT expression { $$ = new_node(yylineno, GRAMMAR_STROP, 0, "+", 2, $1, $3); }
 	| expression STROP_FOR expression { $$ = new_node(yylineno, GRAMMAR_STROP, 0, "%", 2, $1, $3); }
 	| expression '+' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "+", 2, $1, $3); }
@@ -175,7 +180,7 @@ argument_list
 
 void yyerror(const char* string) {
 	fflush(stdout);
-	fprintf(stderr, "*** %s\n", string);
+	fprintf(stderr, "*** %s, line %d\n", string, yylineno);
 	
 }
 
@@ -381,9 +386,9 @@ void compile(node_t* self) {
 				uint64_t current_inline_id = inline_id++;
 				
 				fprintf(yyout,
-					"mov g1 a0\tmov a0 16\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tadd a0 a2\n"
-					":$amber_internal_itos_loop_inline_%ld:\tsub a0 1\tdiv g1 10\tadd a3 48\tmov 1?a0 a3\n"
-					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\tmov g0 a0\n", current_inline_id, current_inline_id);
+					"mov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
+					":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 10\tadd a3 48\tmov 1?g0 a3\n"
+					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", current_inline_id, current_inline_id);
 				
 			} else {
 				fprintf(yyout, "cal %s\t", self->data, self->ref_code, self->ref);
@@ -406,6 +411,16 @@ void compile(node_t* self) {
 		if (self->data[0] == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '*') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 1?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		
+		stack_pointer += 8;
+		
+	} else if (self->type == GRAMMAR_CMPOP) {
+		self->ref_code = (char*) malloc(64);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+		self->ref = "?ad";
+		
+		if (self->data[0] == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+		else if (self->data[0] == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		
 		stack_pointer += 8;
 		

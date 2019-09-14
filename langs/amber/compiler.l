@@ -60,21 +60,27 @@ WS  [ \t\v\n\f]
 "return" return RETURN;
 "var"    return VAR;
 
-"++" return STROP_CAT; // string operations
+"++" return STROP_CAT; // string operators
 "%%" return STROP_FOR;
 
-"+" return '+';
+"===" return STROP_EQ; // string comparison operators
+"!==" return STROP_NEQ;
+
+"==" return CMPOP_EQ; // comparison operators
+"!=" return CMPOP_NEQ;
+
+"+" return '+'; // operators
 "-" return '-';
 "*" return '*';
 "/" return '/';
 "?" return '?';
 "&" return '&';
-
 "=" return '=';
-";" return ';';
+
+";" return ';'; // delimiters
 "," return ',';
 
-"{" return '{';
+"{" return '{'; // brackets
 "}" return '}';
 "[" return '[';
 "]" return ']';
