@@ -201,9 +201,30 @@ static int depth = 0;
 
 static int has_defined_internal_send = 0;
 
+uint64_t create_reference(char* identifier) {
+	if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
+	else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+	
+	memset(&references[reference_count], 0, sizeof(reference_t));
+	strncpy(references[reference_count].identifier, identifier, sizeof(references[reference_count].identifier));
+	
+	references[reference_count].stack_pointer = stack_pointer;
+	stack_pointer += 8;
+	return references[reference_count++].stack_pointer;
+	
+} uint64_t generate_ref_code(node_t* self) {
+	self->ref_code = (char*) malloc(64);
+	sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
+	self->ref = "?ad";
+	
+	uint64_t current_stack_pointer = stack_pointer;
+	stack_pointer += 8;
+	return current_stack_pointer;
+	
+}
+
 void compile(node_t* self) {
 	depth++;
-	//~ printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
 	
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
@@ -216,40 +237,19 @@ void compile(node_t* self) {
 			int argument = 0;
 			
 			while (expression_list_root) {
-				if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
-				else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference(expression_list_root->type == GRAMMAR_ARGUMENT_LIST ? expression_list_root->children[0]->data : expression_list_root->data), argument++);
 				
-				memset(&references[reference_count], 0, sizeof(reference_t));
-				strncpy(references[reference_count].identifier, expression_list_root->type == GRAMMAR_ARGUMENT_LIST ? expression_list_root->children[0]->data : expression_list_root->data, sizeof(references[reference_count].identifier));
-				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", references[reference_count].stack_pointer = stack_pointer, argument++);
-				
-				stack_pointer += 8;
-				reference_count++;
-				
-				if (expression_list_root->type == GRAMMAR_ARGUMENT_LIST) {
-					expression_list_root = expression_list_root->children[1];
-					
-				} else {
-					break;
-					
-				}
+				if (expression_list_root->type == GRAMMAR_ARGUMENT_LIST) expression_list_root = expression_list_root->children[1];
+				else break;
 				
 			}
 			
 		}
 		
 		compile(self->children[0]); // compile statement
+		
 		fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
-		
-		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
-		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
-		
-		memset(&references[reference_count], 0, sizeof(reference_t));
-		strncpy(references[reference_count].identifier, self->data, sizeof(references[reference_count].identifier));
-		fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", references[reference_count].stack_pointer = stack_pointer, self->data);
-		
-		stack_pointer += 8;
-		reference_count++;
+		fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", create_reference(self->data), self->data);
 		
 		depth--;
 		return;
@@ -331,19 +331,8 @@ void compile(node_t* self) {
 	// statements
 	
 	else if (self->type == GRAMMAR_VAR_DECLARATION) {
-		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
-		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
-		
-		memset(&references[reference_count], 0, sizeof(reference_t));
-		strncpy(references[reference_count].identifier, self->data, sizeof(references[reference_count].identifier));
-		
-		if (self->child_count) {
-			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, references[reference_count].stack_pointer = stack_pointer);
-			
-		}
-		
-		stack_pointer += 8;
-		reference_count++;
+		uint64_t current_stack_pointer = create_reference(self->data);
+		if (self->child_count) fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, current_stack_pointer);
 		
 	} else if (self->type == GRAMMAR_PRINT) {
 		if (self->child_count) fprintf(yyout, "%smov a0 %s\tcal print\n", self->children[0]->ref_code, self->children[0]->ref);
@@ -358,9 +347,7 @@ void compile(node_t* self) {
 	// operations
 	
 	else if (self->type == GRAMMAR_CALL) {
-		self->ref_code = (char*) malloc(64);
-		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
-		self->ref = "?ad";
+		generate_ref_code(self);
 		
 		node_t* expression_list_root = (node_t*) 0;
 		int argument = 0;
@@ -391,7 +378,7 @@ void compile(node_t* self) {
 					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", current_inline_id, current_inline_id);
 				
 			} else {
-				fprintf(yyout, "cal %s\t", self->data, self->ref_code, self->ref);
+				fprintf(yyout, "cal %s\t", self->data);
 				
 			}
 			
@@ -401,34 +388,22 @@ void compile(node_t* self) {
 		}
 		
 		fprintf(yyout, "%smov %s g0\n", self->ref_code, self->ref);
-		stack_pointer += 8;
 		
 	} else if (self->type == GRAMMAR_ASSIGN) {
-		self->ref_code = (char*) malloc(64);
-		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
-		self->ref = "?ad";
+		generate_ref_code(self);
 		
 		if (self->data[0] == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '*') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 1?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		
-		stack_pointer += 8;
-		
 	} else if (self->type == GRAMMAR_CMPOP) {
-		self->ref_code = (char*) malloc(64);
-		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
-		self->ref = "?ad";
+		generate_ref_code(self);
 		
 		if (self->data[0] == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		else if (self->data[0] == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		
-		stack_pointer += 8;
-		
 	} else if (self->type == GRAMMAR_OPERATION) {
-		self->ref_code = (char*) malloc(64);
-		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
-		self->ref = "?ad";
-		
+		generate_ref_code(self);
 		char* operator_instruction = "nop";
 		
 		if (self->data[0] == '+') operator_instruction = "add";
@@ -437,13 +412,9 @@ void compile(node_t* self) {
 		else if (self->data[0] == '/') operator_instruction = "div";
 		
 		fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, operator_instruction, self->children[1]->ref, self->ref_code, self->ref);
-		stack_pointer += 8;
 		
 	} else if (self->type == GRAMMAR_UNARY) {
-		self->ref_code = (char*) malloc(64);
-		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
-		self->ref = "?ad";
-		
+		generate_ref_code(self);
 		char* unary_code = "nop g0";
 		
 		if (self->data[0] == '-') unary_code = "xor g0 x8000000000000000\tadd g0 1";
@@ -453,13 +424,9 @@ void compile(node_t* self) {
 		else if (self->data[0] == '&') unary_code = "mov g0 ad";
 		
 		fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, unary_code, self->ref_code, self->ref);
-		stack_pointer += 8;
 		
 	} else if (self->type == GRAMMAR_STROP) {
-		self->ref_code = (char*) malloc(64);
-		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
-		self->ref = "?ad";
-		
+		generate_ref_code(self);
 		char* strop_code = "";
 		
 		if (self->data[0] == '+') {
@@ -484,7 +451,6 @@ void compile(node_t* self) {
 		}
 		
 		fprintf(yyout, "%smov g0 %s\t%smov g1 %s\n%s%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, strop_code, self->ref_code, self->ref);
-		stack_pointer += 8;
 		
 	}
 	
@@ -525,6 +491,6 @@ int main(int argc, char* argv[]) {
 	
 	yyparse();
 	fclose(yyout);
-	system("geany main.asm");
+	//~ system("geany main.asm");
 	return 0; 
 }
