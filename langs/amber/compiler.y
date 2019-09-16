@@ -17,7 +17,7 @@
 	#define GRAMMAR_PROGRAM 0
 	#define GRAMMAR_STATEMENT 1
 	#define GRAMMAR_PRINT 2
-	#define GRAMMAR_VAR_DECLARATION 3
+	#define GRAMMAR_VAR_DECL 3
 	#define GRAMMAR_STATEMENT_LIST 4
 	#define GRAMMAR_NUMBER 5
 	#define GRAMMAR_IDENTIFIER 6
@@ -38,6 +38,8 @@
 	#define GRAMMAR_ARGUMENT 23
 	#define GRAMMAR_ARGUMENT_LIST 24
 	#define GRAMMAR_CMPOP 25
+	#define GRAMMAR_DECL_LIST 26
+	#define GRAMMAR_CLASS 27
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -86,7 +88,7 @@
 	struct node_s* ast;
 }
 
-%token FUNC IF WHILE GOTO LAB RETURN VAR PRINT
+%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -104,7 +106,7 @@
 %left '*' '/'
 %left '?' '&'
 
-%type<ast> program statement statement_list expression expression_list argument argument_list
+%type<ast> program statement statement_list declaration declaration_list expression expression_list argument argument_list
 
 %start program
 %%
@@ -115,12 +117,9 @@ program
 statement
 	: ';' { $$ = new_node(yylineno, GRAMMAR_STATEMENT, 0, "", 0); }
 	| expression ';' { $$ = $1; }
+	| declaration { $$ = $1; }
 	| PRINT expression ';' { $$ = new_node(yylineno, GRAMMAR_PRINT, 0, "", 1, $2); }
 	| RETURN expression ';' { $$ = new_node(yylineno, GRAMMAR_RETURN, 0, "", 1, $2); }
-	| FUNC IDENTIFIER statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 1, $3); }
-	| FUNC IDENTIFIER '(' argument_list ')' statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 2, $6, $4); }
-	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 1, $4); }
-	| VAR IDENTIFIER ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECLARATION, 0, $2, 0); }
 	| WHILE '(' expression ')' statement { $$ = new_node(yylineno, GRAMMAR_WHILE, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(yylineno, GRAMMAR_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(yylineno, GRAMMAR_IFELSE, 0, "", 3, $3, $5, $7); }
@@ -131,6 +130,19 @@ statement
 statement_list
 	: statement { $$ = $1; }
 	| statement_list statement { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 2, $1, $2); }
+	;
+
+declaration
+	: CLASS IDENTIFIER '{' declaration_list '}' { $$ = new_node(yylineno, GRAMMAR_CLASS, 0, $2, 1, $4); }
+	| FUNC IDENTIFIER statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 1, $3); }
+	| FUNC IDENTIFIER '(' argument_list ')' statement { $$ = new_node(yylineno, GRAMMAR_FUNC, 0, $2, 2, $6, $4); }
+	| VAR IDENTIFIER '=' expression ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECL, 0, $2, 1, $4); }
+	| VAR IDENTIFIER ';' { $$ = new_node(yylineno, GRAMMAR_VAR_DECL, 0, $2, 0); }
+	;
+
+declaration_list
+	: declaration { $$ = $1; }
+	| declaration_list declaration { $$ = new_node(yylineno, GRAMMAR_DECL_LIST, 0, "", 2, $1, $2); }
 	;
 
 expression
@@ -191,9 +203,20 @@ typedef struct {
 	
 } reference_t;
 
+typedef struct class_s {
+	char identifier[64];
+	
+	uint64_t class_count;
+	struct class_s* classes;
+	
+	uint64_t reference_count;
+	reference_t* references;
+	
+} class_t;
+
 static uint64_t stack_pointer = 0;
-static uint64_t reference_count = 0;
-static reference_t* references = (reference_t*) 0;
+static class_t main_class = {0};
+static class_t* current_class = &main_class;
 
 static uint64_t inline_id = 0;
 
@@ -202,20 +225,36 @@ static int depth = 0;
 
 static int has_defined_internal_send = 0;
 
-uint64_t create_reference(char* identifier) {
-	if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
-	else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+class_t* create_class(class_t* self, char* identifier) {
+	if (self->classes) self->classes = (class_t*) realloc(self->classes, (self->class_count + 1) * sizeof(class_t));
+	else self->classes = (class_t*) malloc((self->class_count + 1) * sizeof(class_t));
 	
-	memset(&references[reference_count], 0, sizeof(reference_t));
-	strncpy(references[reference_count].identifier, identifier, sizeof(references[reference_count].identifier));
+	memset(&self->classes[self->class_count], 0, sizeof(class_t));
+	strncpy(self->classes[self->class_count].identifier, identifier, sizeof(self->classes[self->class_count].identifier));
 	
-	references[reference_count].scope_depth = depth;
-	references[reference_count].stack_pointer = stack_pointer;
+	return &self->classes[self->class_count++];
+	
+}
+
+uint64_t create_reference_in_class(class_t* self, char* identifier) {
+	if (self->references) self->references = (reference_t*) realloc(self->references, (self->reference_count + 1) * sizeof(reference_t));
+	else self->references = (reference_t*) malloc((self->reference_count + 1) * sizeof(reference_t));
+	
+	memset(&self->references[self->reference_count], 0, sizeof(reference_t));
+	strncpy(self->references[self->reference_count].identifier, identifier, sizeof(self->references[self->reference_count].identifier));
+	
+	self->references[self->reference_count].scope_depth = depth;
+	self->references[self->reference_count].stack_pointer = stack_pointer;
 	
 	stack_pointer += 8;
-	return references[reference_count++].stack_pointer;
+	return self->references[self->reference_count++].stack_pointer;
 	
-} uint64_t generate_stack_entry(node_t* self) {
+} uint64_t create_reference(char* identifier) {
+	return create_reference_in_class(current_class, identifier);
+	
+}
+
+uint64_t generate_stack_entry(node_t* self) {
 	self->ref_code = (char*) malloc(64);
 	sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer);
 	self->ref = "?ad";
@@ -225,7 +264,7 @@ uint64_t create_reference(char* identifier) {
 	return current_stack_pointer;
 	
 } void decrement_depth(void) {
-	for (int i = 0; i < reference_count; i++) if (references[i].scope_depth > depth + 1) references[i].scope_depth = -1;
+	for (int i = 0; i < current_class->reference_count; i++) if (current_class->references[i].scope_depth > depth + 1) current_class->references[i].scope_depth = -1;
 	depth--;
 	
 }
@@ -237,18 +276,64 @@ void compile(node_t* self) {
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
 		
+	} else if (self->type == GRAMMAR_CLASS) {
+		class_t* class = create_class(current_class, self->data);
+		
+		if (self->child_count > 0) { // has members
+			node_t* member_list_root = self->children[0];
+			int member = 0;
+			
+			while (member_list_root) {
+				node_t* current_node = member_list_root;
+				if (member_list_root->type == GRAMMAR_DECL_LIST) current_node = member_list_root->children[0];
+				
+				if (current_node->type == GRAMMAR_VAR_DECL) {
+					create_reference_in_class(class, current_node->data);
+					
+				} else if (current_node->type == GRAMMAR_FUNC) {
+					class_t* previous_class = current_class;
+					current_class = class;
+					compile(current_node);
+					current_class = previous_class;
+					
+				} else if (current_node->type == GRAMMAR_CLASS) {
+					/// TODO good luck with this one mate
+					/// TODO good luck with this one mate
+					/// TODO good luck with this one mate
+					/// TODO good luck with this one mate
+					/// TODO good luck with this one mate
+					/// TODO good luck with this one mate
+					/// TODO good luck with this one mate
+					
+				}
+				
+				if (member_list_root->type == GRAMMAR_DECL_LIST) member_list_root = member_list_root->children[1];
+				else break;
+				
+			}
+			
+		}
+		
+		for (int i = 0; i < class->reference_count; i++) {
+			printf("CLASS %s REFERENCE %d: %s\n", class->identifier, i, class->references[i].identifier);
+			
+		}
+		
+		depth--;
+		return;
+		
 	} else if (self->type == GRAMMAR_FUNC) {
 		fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
 		depth++;
 		
 		if (self->child_count > 1) { // has arguments
-			node_t* expression_list_root = self->children[1];
+			node_t* argument_list_root = self->children[1];
 			int argument = 0;
 			
-			while (expression_list_root) {
-				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference(expression_list_root->type == GRAMMAR_ARGUMENT_LIST ? expression_list_root->children[0]->data : expression_list_root->data), argument++);
+			while (argument_list_root) {
+				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference(argument_list_root->type == GRAMMAR_ARGUMENT_LIST ? argument_list_root->children[0]->data : argument_list_root->data), argument++);
 				
-				if (expression_list_root->type == GRAMMAR_ARGUMENT_LIST) expression_list_root = expression_list_root->children[1];
+				if (argument_list_root->type == GRAMMAR_ARGUMENT_LIST) argument_list_root = argument_list_root->children[1];
 				else break;
 				
 			}
@@ -324,10 +409,10 @@ void compile(node_t* self) {
 		fprintf(yyout, "%%\n");
 		
 	} else if (self->type == GRAMMAR_IDENTIFIER) {
-		for (int i = 0; i < reference_count; i++) {
-			if (references[i].scope_depth >= 0 && strncmp(references[i].identifier, self->data, sizeof(references[i].identifier)) == 0) {
+		for (int i = 0; i < current_class->reference_count; i++) {
+			if (current_class->references[i].scope_depth >= 0 && strncmp(current_class->references[i].identifier, self->data, sizeof(current_class->references[i].identifier)) == 0) {
 				self->ref_code = (char*) malloc(64);
-				sprintf(self->ref_code, "cad bp sub %ld\t", references[i].stack_pointer);
+				sprintf(self->ref_code, "cad bp sub %ld\t", current_class->references[i].stack_pointer);
 				
 				self->ref = "?ad";
 				break;
@@ -340,7 +425,7 @@ void compile(node_t* self) {
 	
 	// statements
 	
-	else if (self->type == GRAMMAR_VAR_DECLARATION) {
+	else if (self->type == GRAMMAR_VAR_DECL) {
 		uint64_t current_stack_pointer = create_reference(self->data);
 		if (self->child_count) fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, current_stack_pointer);
 		
@@ -501,6 +586,6 @@ int main(int argc, char* argv[]) {
 	
 	yyparse();
 	fclose(yyout);
-	system("geany main.asm");
+	//~ system("geany main.asm");
 	return 0; 
 }

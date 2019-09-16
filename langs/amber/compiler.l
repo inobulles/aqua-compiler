@@ -54,6 +54,7 @@ WS  [ \t\v\n\f]
 "else"   return ELSE;
 "while"  return WHILE;
 "func"   return FUNC;
+"class"  return CLASS;
 "goto"   return GOTO;
 "lab"    return LAB;
 "print"  return PRINT;
