@@ -219,6 +219,7 @@ static class_t main_class = {0};
 static class_t* current_class = &main_class;
 
 static uint64_t inline_id = 0;
+static uint64_t func_id = 0;
 
 static int data_section_count = 0;
 static int depth = 0;
@@ -323,7 +324,8 @@ void compile(node_t* self) {
 		return;
 		
 	} else if (self->type == GRAMMAR_FUNC) {
-		fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
+		uint64_t current_func_id = func_id++;
+		fprintf(yyout, "jmp $amber_func_%ld_end\t:$amber_func_%ld:\n", current_func_id, current_func_id);
 		depth++;
 		
 		if (self->child_count > 1) { // has arguments
@@ -343,8 +345,8 @@ void compile(node_t* self) {
 		decrement_depth();
 		compile(self->children[0]); // compile statement
 		
-		fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
-		fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", create_reference(self->data), self->data);
+		fprintf(yyout, "mov g0 0\tret\t:$amber_func_%d_end:\n", current_func_id);
+		fprintf(yyout, "cad bp sub %ld\tmov ?ad $amber_func_%d_end\n", create_reference(self->data), current_func_id);
 		
 		depth--;
 		return;
