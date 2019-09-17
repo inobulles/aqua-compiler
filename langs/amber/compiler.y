@@ -470,9 +470,9 @@ void compile(node_t* self) {
 				uint64_t current_inline_id = inline_id++;
 				
 				fprintf(yyout,
-					"mov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
-					":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 10\tadd a3 48\tmov 1?g0 a3\n"
-					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", current_inline_id, current_inline_id);
+					"%smov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
+					":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
+					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current_inline_id, argument > 1 ? "g3" : "10", current_inline_id);
 				
 			} else { /// TODO make this work for kos function
 				//~ fprintf(yyout, "cal %s\t", self->data);
