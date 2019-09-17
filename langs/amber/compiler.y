@@ -474,8 +474,9 @@ void compile(node_t* self) {
 					":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 10\tadd a3 48\tmov 1?g0 a3\n"
 					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", current_inline_id, current_inline_id);
 				
-			} else {
-				fprintf(yyout, "cal %s\t", self->data);
+			} else { /// TODO make this work for kos function
+				//~ fprintf(yyout, "cal %s\t", self->data);
+				fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
 				
 			}
 			
