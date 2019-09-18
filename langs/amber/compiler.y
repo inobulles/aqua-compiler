@@ -40,6 +40,7 @@
 	#define GRAMMAR_CMPOP 25
 	#define GRAMMAR_DECL_LIST 26
 	#define GRAMMAR_CLASS 27
+	#define GRAMMAR_ACCESS 28
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -105,6 +106,7 @@
 %left '+' '-'
 %left '*' '/'
 %left '?' '&'
+%left ARROW '.'
 
 %type<ast> program statement statement_list declaration declaration_list expression expression_list argument argument_list
 
@@ -148,11 +150,12 @@ declaration_list
 expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
+	| '(' IDENTIFIER ')' { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $2, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
+	| expression '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $1); }
 	| IDENTIFIER '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 0); }
-	| '(' expression ')' '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $2); }
+	| expression '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 2, $1, $3); }
 	| IDENTIFIER '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 1, $3); }
-	| '(' expression ')' '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 2, $2, $5); }
 	| '*' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "*", 2, $2, $4); }
 	| '?' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "?", 2, $2, $4); }
 	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
@@ -169,6 +172,7 @@ expression
 	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "*", 2, $1, $3); }
 	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "/", 2, $1, $3); }
+	| expression '.' expression { $$ = new_node(yylineno, GRAMMAR_ACCESS, 0, ".", 2, $1, $3); }
 	| '(' expression ')' { $$ = $2; }
 	;
 
@@ -205,6 +209,7 @@ typedef struct {
 
 typedef struct class_s {
 	char identifier[64];
+	int scope_depth;
 	
 	uint64_t class_count;
 	struct class_s* classes;
@@ -232,6 +237,7 @@ class_t* create_class(class_t* self, char* identifier) {
 	
 	memset(&self->classes[self->class_count], 0, sizeof(class_t));
 	strncpy(self->classes[self->class_count].identifier, identifier, sizeof(self->classes[self->class_count].identifier));
+	self->classes[self->class_count].scope_depth = depth;
 	
 	return &self->classes[self->class_count++];
 	
@@ -266,16 +272,44 @@ uint64_t generate_stack_entry(node_t* self) {
 	
 } void decrement_depth(void) {
 	for (int i = 0; i < current_class->reference_count; i++) if (current_class->references[i].scope_depth > depth + 1) current_class->references[i].scope_depth = -1;
+	for (int i = 0; i < current_class->class_count; i++) if (current_class->classes[i].scope_depth > depth + 2) current_class->classes[i].scope_depth = -1;
 	depth--;
 	
 }
 
 void compile(node_t* self) {
 	depth++;
-	//~ printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
+	printf("\t# %d -> line = %d, type = %d, data = %s, children = %d\n", depth, self->line, self->type, self->data, self->child_count);
 	
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
+		
+	} else if (self->type == GRAMMAR_ACCESS) {
+		class_t* class = (class_t*) 0;
+		for (int i = 0; i < current_class->class_count; i++) {
+			printf("%d\n", current_class->classes[i].scope_depth);
+			if (current_class->classes[i].scope_depth >= 0 && strncmp(current_class->classes[i].identifier, self->children[0]->data, sizeof(current_class->classes[i].identifier)) == 0) {
+				class = &current_class->classes[i];
+				break;
+				
+			}
+			
+		}
+		
+		printf("FUCK %s\n", class->identifier);
+		if (self->data[0] == '.') {
+			class_t* previous_class = current_class;
+			current_class = class;
+			compile(self->children[1]);
+			current_class = previous_class;
+			
+			generate_stack_entry(self);
+			fprintf(yyout, "%smov g0 %s\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			
+		}
+		
+		depth--;
+		return;
 		
 	} else if (self->type == GRAMMAR_CLASS) {
 		class_t* class = create_class(current_class, self->data);
@@ -345,8 +379,8 @@ void compile(node_t* self) {
 		decrement_depth();
 		compile(self->children[0]); // compile statement
 		
-		fprintf(yyout, "mov g0 0\tret\t:$amber_func_%d_end:\n", current_func_id);
-		fprintf(yyout, "cad bp sub %ld\tmov ?ad $amber_func_%d_end\n", create_reference(self->data), current_func_id);
+		fprintf(yyout, "mov g0 0\tret\t:$amber_func_%ld_end:\n", current_func_id);
+		fprintf(yyout, "cad bp sub %ld\tmov ?ad $amber_func_%ld\n", create_reference(self->data), current_func_id);
 		
 		depth--;
 		return;
@@ -589,6 +623,6 @@ int main(int argc, char* argv[]) {
 	
 	yyparse();
 	fclose(yyout);
-	//~ system("geany main.asm");
+	system("geany main.asm");
 	return 0; 
 }
