@@ -153,9 +153,7 @@ expression
 	| '(' IDENTIFIER ')' { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $2, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
 	| expression '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $1); }
-	| IDENTIFIER '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 0); }
 	| expression '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 2, $1, $3); }
-	| IDENTIFIER '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, $1, 1, $3); }
 	| '*' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "*", 2, $2, $4); }
 	| '?' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "?", 2, $2, $4); }
 	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
@@ -376,13 +374,13 @@ void compile(node_t* self) {
 			
 		}
 		
-		decrement_depth();
 		compile(self->children[0]); // compile statement
+		depth--;
+		decrement_depth();
 		
 		fprintf(yyout, "mov g0 0\tret\t:$amber_func_%ld_end:\n", current_func_id);
 		fprintf(yyout, "cad bp sub %ld\tmov ?ad $amber_func_%ld\n", create_reference(self->data), current_func_id);
 		
-		depth--;
 		return;
 		
 	} else if (self->type == GRAMMAR_WHILE) {
@@ -508,9 +506,8 @@ void compile(node_t* self) {
 					":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
 					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current_inline_id, argument > 1 ? "g3" : "10", current_inline_id);
 				
-			} else { /// TODO make this work for kos function
-				//~ fprintf(yyout, "cal %s\t", self->data);
-				fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
+			} else {
+				printf("ERROR ON LINE %d\n", __LINE__);
 				
 			}
 			
@@ -623,6 +620,6 @@ int main(int argc, char* argv[]) {
 	
 	yyparse();
 	fclose(yyout);
-	system("geany main.asm");
+	//~ system("geany main.asm");
 	return 0; 
 }
