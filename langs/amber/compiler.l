@@ -60,6 +60,7 @@ WS  [ \t\v\n\f]
 "print"  return PRINT;
 "return" return RETURN;
 "var"    return VAR;
+"new"    return NEW;
 
 "++" return STROP_CAT; // string operators
 "%%" return STROP_FOR;

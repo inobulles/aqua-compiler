@@ -41,6 +41,7 @@
 	#define GRAMMAR_DECL_LIST 26
 	#define GRAMMAR_CLASS 27
 	#define GRAMMAR_ACCESS 28
+	#define GRAMMAR_NEW 29
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -89,7 +90,7 @@
 	struct node_s* ast;
 }
 
-%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT
+%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT NEW
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -144,12 +145,13 @@ declaration
 
 declaration_list
 	: declaration { $$ = $1; }
-	| declaration_list declaration { $$ = new_node(yylineno, GRAMMAR_DECL_LIST, 0, "", 2, $1, $2); }
+	| declaration declaration_list { $$ = new_node(yylineno, GRAMMAR_DECL_LIST, 0, "", 2, $1, $2); }
 	;
 
 expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
+	| NEW IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_NEW, 0, $2, 0); }
 	| '(' IDENTIFIER ')' { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $2, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
 	| expression '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $1); }
@@ -208,6 +210,7 @@ typedef struct {
 typedef struct class_s {
 	char identifier[64];
 	int scope_depth;
+	int bytes;
 	
 	uint64_t class_count;
 	struct class_s* classes;
@@ -235,7 +238,9 @@ class_t* create_class(class_t* self, char* identifier) {
 	
 	memset(&self->classes[self->class_count], 0, sizeof(class_t));
 	strncpy(self->classes[self->class_count].identifier, identifier, sizeof(self->classes[self->class_count].identifier));
+	
 	self->classes[self->class_count].scope_depth = depth;
+	self->classes[self->class_count].bytes = 0;
 	
 	return &self->classes[self->class_count++];
 	
@@ -282,6 +287,23 @@ void compile(node_t* self) {
 	if (self->type == GRAMMAR_PROGRAM) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
 		
+	} else if (self->type == GRAMMAR_NEW) {
+		class_t* class = (class_t*) 0;
+		for (int i = 0; i < current_class->class_count; i++) {
+			if (current_class->classes[i].scope_depth >= 0 && strncmp(current_class->classes[i].identifier, self->data, sizeof(current_class->classes[i].identifier)) == 0) {
+				class = &current_class->classes[i];
+				break;
+				
+			}
+			
+		}
+		
+		generate_stack_entry(self);
+		fprintf(yyout, "mov a0 %d\tcal malloc\t%smov %s g0\n", class->bytes, self->ref_code, self->ref);
+		
+		depth--;
+		return;
+		
 	} else if (self->type == GRAMMAR_ACCESS) {
 		class_t* class = (class_t*) 0;
 		for (int i = 0; i < current_class->class_count; i++) {
@@ -322,6 +344,7 @@ void compile(node_t* self) {
 				
 				if (current_node->type == GRAMMAR_VAR_DECL) {
 					create_reference_in_class(class, current_node->data);
+					class->bytes += 8;
 					
 				} else if (current_node->type == GRAMMAR_FUNC) {
 					class_t* previous_class = current_class;
@@ -475,7 +498,7 @@ void compile(node_t* self) {
 		
 	}
 	
-	// operations
+	/// TODO find me a name!
 	
 	else if (self->type == GRAMMAR_CALL) {
 		generate_stack_entry(self);
@@ -521,7 +544,11 @@ void compile(node_t* self) {
 		
 		fprintf(yyout, "%smov %s g0\n", self->ref_code, self->ref);
 		
-	} else if (self->type == GRAMMAR_ASSIGN) {
+	}
+	
+	// operations
+	
+	else if (self->type == GRAMMAR_ASSIGN) {
 		generate_stack_entry(self);
 		
 		if (self->data[0] == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
