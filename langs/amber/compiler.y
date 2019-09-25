@@ -131,7 +131,7 @@ statement
 
 statement_list
 	: statement { $$ = $1; }
-	| statement_list statement { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 2, $1, $2); }
+	| statement statement_list { $$ = new_node(yylineno, GRAMMAR_STATEMENT_LIST, 0, "", 2, $1, $2); }
 	;
 
 declaration
@@ -444,6 +444,8 @@ void compile(node_t* self) {
 		
 	} else if (self->type == GRAMMAR_IDENTIFIER) {
 		for (int i = 0; i < current_class->reference_count; i++) {
+			printf("=== %s %s %d\n", current_class->references[i].identifier, self->data,current_class->references[i].scope_depth);
+			
 			if (current_class->references[i].scope_depth >= 0 && strncmp(current_class->references[i].identifier, self->data, sizeof(current_class->references[i].identifier)) == 0) {
 				self->ref_code = (char*) malloc(64);
 				sprintf(self->ref_code, "cad bp sub %ld\t", current_class->references[i].stack_pointer);
@@ -512,6 +514,7 @@ void compile(node_t* self) {
 			}
 			
 		} else {
+			printf("%p %d\n", self->children[0]->ref, self->child_count);
 			fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
 			
 		}
