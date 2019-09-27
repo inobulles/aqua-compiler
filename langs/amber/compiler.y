@@ -46,6 +46,7 @@
 	#define GRAMMAR_BUILTIN 30
 	
 	typedef struct {
+		uint8_t is_function;
 		char identifier[64];
 		uint64_t stack_pointer;
 		int scope_depth;
@@ -75,6 +76,7 @@
 		char* ref, *ref_code, *data;
 		uint64_t stack_pointer;
 		class_t* class;
+		struct node_s* access_class_object;
 		int data_bytes, type, line;
 		
 	} node_t;
@@ -115,7 +117,7 @@
 	struct node_s* ast;
 }
 
-%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT NEW 
+%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT NEW
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -177,7 +179,6 @@ expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
 	| NEW IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_NEW, 0, $2, 0); }
-	| expression '.' IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_ACCESS, 0, $3, 1, $1); }
 	| '(' IDENTIFIER ')' { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $2, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
 	| expression '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $1); }
@@ -200,6 +201,7 @@ expression
 	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "*", 2, $1, $3); }
 	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "/", 2, $1, $3); }
+	| expression '.' IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_ACCESS, 0, $3, 1, $1); }
 	| '(' expression ')' { $$ = $2; }
 	;
 
@@ -210,6 +212,7 @@ expression_list
 
 argument
 	: VAR IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_ARGUMENT, 0, $2, 0); }
+	| IDENTIFIER IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_ARGUMENT, 0, $2, 1, $1); }
 	;
 
 argument_list
@@ -310,25 +313,28 @@ void compile(node_t* self) {
 		return;
 		
 	} else if (self->type == GRAMMAR_ACCESS) {
-		compile(self->children[0]);
-		self->class = self->children[0]->class;
-		
-		printf("%lld\n", self->class);
+		self->access_class_object = self->children[0];
+		compile(self->access_class_object);
+		self->class = self->access_class_object->class;
 		
 		uint64_t offset = 0;
 		for (int i = 0; i < self->class->reference_count; i++) {
-			if (strcmp(self->class->references[i].identifier, self->data) == 0) {
+			uint8_t found = strcmp(self->class->references[i].identifier, self->data) == 0;
+			
+			if (found) {
 				self->ref_code = (char*) malloc(64);
-				sprintf(self->ref_code, "%scad %s add %ld\t", self->children[0]->ref_code, self->children[0]->ref, offset);
 				
+				if (self->class->references[i].is_function) sprintf(self->ref_code, "#look at me# cad bp sub %ld\t", self->class->references[i].stack_pointer, offset);
+				else sprintf(self->ref_code, "%scad %s add %ld\t", self->access_class_object->ref_code, self->access_class_object->ref, offset);
+				
+			} if (!self->class->references[i].is_function) {
+				offset += 8;
+				
+			} if (found) {
 				self->ref = "?ad";
 				break;
 				
-				printf("FOUND A MATCH IN CLASS %s offset %d\n", self->data, offset);
-				
 			}
-			
-			offset += 8;
 			
 		}
 		
@@ -358,12 +364,6 @@ void compile(node_t* self) {
 					
 				} else if (current_node->type == GRAMMAR_CLASS) {
 					/// TODO good luck with this one mate
-					/// TODO good luck with this one mate
-					/// TODO good luck with this one mate
-					/// TODO good luck with this one mate
-					/// TODO good luck with this one mate
-					/// TODO good luck with this one mate
-					/// TODO good luck with this one mate
 					
 				}
 				
@@ -387,9 +387,11 @@ void compile(node_t* self) {
 		fprintf(yyout, "jmp $amber_func_%ld_end\t:$amber_func_%ld:\n", current_func_id, current_func_id);
 		depth++;
 		
+		int argument = 0;
+		if (current_class != &main_class) fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference("self"), argument++); // in class (take into account self argument)
+		
 		if (self->child_count > 1) { // has arguments
 			node_t* argument_list_root = self->children[1];
-			int argument = 0;
 			
 			while (argument_list_root) {
 				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference(argument_list_root->type == GRAMMAR_ARGUMENT_LIST ? argument_list_root->children[0]->data : argument_list_root->data), argument++);
@@ -407,6 +409,7 @@ void compile(node_t* self) {
 		
 		fprintf(yyout, "mov g0 0\tret\t:$amber_func_%ld_end:\n", current_func_id);
 		fprintf(yyout, "cad bp sub %ld\tmov ?ad $amber_func_%ld\n", create_reference(self->data), current_func_id);
+		current_class->references[current_class->reference_count - 1].is_function = 1;
 		
 		return;
 		
@@ -454,7 +457,9 @@ void compile(node_t* self) {
 	
 	for (int i = 0; i < self->child_count; i++) {
 		compile(self->children[i]);
+		
 		if (self->children[i]->class) self->class = self->children[i]->class;
+		if (self->children[i]->access_class_object) self->access_class_object = self->children[i]->access_class_object;
 		
 	}
 	
@@ -522,6 +527,7 @@ void compile(node_t* self) {
 		
 		node_t* expression_list_root = (node_t*) 0;
 		int argument = 0;
+		if (self->children[0]->access_class_object) fprintf(yyout, "%smov a%d ad\t", self->children[0]->access_class_object->ref_code, argument++);
 		
 		if (*self->data && self->child_count == 1) expression_list_root = self->children[0];
 		else if (!*self->data && self->child_count == 2) expression_list_root = self->children[1];
@@ -541,7 +547,6 @@ void compile(node_t* self) {
 		
 		if (self->type == GRAMMAR_BUILTIN) {
 			if (strcmp(self->data, "str") == 0) {
-				printf("MAY THIS BE IT\n");
 				uint64_t current_inline_id = inline_id++;
 				
 				fprintf(yyout,
