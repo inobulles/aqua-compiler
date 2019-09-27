@@ -76,6 +76,7 @@
 		char* ref, *ref_code, *data;
 		uint64_t stack_pointer;
 		class_t* class;
+		uint8_t self_zero;
 		struct node_s* access_class_object;
 		int data_bytes, type, line;
 		
@@ -314,8 +315,22 @@ void compile(node_t* self) {
 		
 	} else if (self->type == GRAMMAR_ACCESS) {
 		self->access_class_object = self->children[0];
-		compile(self->access_class_object);
-		self->class = self->access_class_object->class;
+		self->class = (class_t*) 0;
+		self->self_zero = 1;
+		
+		for (int i = 0; i < current_class->class_count; i++) {
+			if (current_class->classes[i].scope_depth >= 0 && strncmp(current_class->classes[i].identifier, self->access_class_object->data, sizeof(current_class->classes[i].identifier)) == 0) {
+				self->class = &current_class->classes[i];
+				break;
+				
+			}
+			
+		} if (!self->class) {
+			self->self_zero = 0;
+			compile(self->access_class_object);
+			self->class = self->access_class_object->class;
+			
+		}
 		
 		uint64_t offset = 0;
 		for (int i = 0; i < self->class->reference_count; i++) {
@@ -324,7 +339,7 @@ void compile(node_t* self) {
 			if (found) {
 				self->ref_code = (char*) malloc(64);
 				
-				if (self->class->references[i].is_function) sprintf(self->ref_code, "#look at me# cad bp sub %ld\t", self->class->references[i].stack_pointer, offset);
+				if (self->class->references[i].is_function) sprintf(self->ref_code, "cad bp sub %ld\t", self->class->references[i].stack_pointer, offset);
 				else sprintf(self->ref_code, "%scad %s add %ld\t", self->access_class_object->ref_code, self->access_class_object->ref, offset);
 				
 			} if (!self->class->references[i].is_function) {
@@ -527,7 +542,7 @@ void compile(node_t* self) {
 		
 		node_t* expression_list_root = (node_t*) 0;
 		int argument = 0;
-		if (self->children[0]->access_class_object) fprintf(yyout, "%smov a%d ad\t", self->children[0]->access_class_object->ref_code, argument++);
+		if (self->children[0]->access_class_object) fprintf(yyout, "%smov a%d %s\t", self->children[0]->access_class_object->ref_code, argument++, self->children[0]->self_zero ? "0" : "ad");
 		
 		if (*self->data && self->child_count == 1) expression_list_root = self->children[0];
 		else if (!*self->data && self->child_count == 2) expression_list_root = self->children[1];
