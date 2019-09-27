@@ -49,6 +49,7 @@
 		char identifier[64];
 		uint64_t stack_pointer;
 		int scope_depth;
+		void* class;
 		
 	} reference_t;
 	
@@ -301,6 +302,7 @@ void compile(node_t* self) {
 			
 		}
 		
+		self->class = class;
 		generate_stack_entry(self);
 		fprintf(yyout, "mov a0 %d\tcal malloc\t%smov %s g0\n", class->bytes, self->ref_code, self->ref);
 		
@@ -309,13 +311,15 @@ void compile(node_t* self) {
 		
 	} else if (self->type == GRAMMAR_ACCESS) {
 		compile(self->children[0]);
-		class_t* class = &current_class->classes[0]; // self->children[0]->class
+		self->class = self->children[0]->class;
+		
+		printf("%lld\n", self->class);
 		
 		uint64_t offset = 0;
-		for (int i = 0; i < class->reference_count; i++) {
-			if (strcmp(class->references[i].identifier, self->data) == 0) {
+		for (int i = 0; i < self->class->reference_count; i++) {
+			if (strcmp(self->class->references[i].identifier, self->data) == 0) {
 				self->ref_code = (char*) malloc(64);
-				sprintf(self->ref_code, "#access %ld + %ld# %scad %s add %ld\t", self->children[0]->stack_pointer, offset, self->children[0]->ref_code, self->children[0]->ref, offset);
+				sprintf(self->ref_code, "%scad %s add %ld\t", self->children[0]->ref_code, self->children[0]->ref, offset);
 				
 				self->ref = "?ad";
 				break;
@@ -448,7 +452,12 @@ void compile(node_t* self) {
 		
 	}
 	
-	for (int i = 0; i < self->child_count; i++) compile(self->children[i]);
+	for (int i = 0; i < self->child_count; i++) {
+		compile(self->children[i]);
+		if (self->children[i]->class) self->class = self->children[i]->class;
+		
+	}
+	
 	decrement_depth();
 	
 	// literals
@@ -470,6 +479,9 @@ void compile(node_t* self) {
 			printf("=== %s %s %d\n", current_class->references[i].identifier, self->data,current_class->references[i].scope_depth);
 			
 			if (current_class->references[i].scope_depth >= 0 && strncmp(current_class->references[i].identifier, self->data, sizeof(current_class->references[i].identifier)) == 0) {
+				self->class = current_class->references[i].class;
+				printf("CLASS %s %lld\n", current_class->references[i].identifier, self->class);
+				
 				self->ref_code = (char*) malloc(64);
 				sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = current_class->references[i].stack_pointer);
 				
@@ -486,7 +498,12 @@ void compile(node_t* self) {
 	
 	else if (self->type == GRAMMAR_VAR_DECL) {
 		uint64_t current_stack_pointer = create_reference(self->data);
-		if (self->child_count) fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, current_stack_pointer);
+		
+		if (self->child_count) {
+			current_class->references[current_class->reference_count - 1].class = self->children[0]->class;
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", self->children[0]->ref_code, self->children[0]->ref, current_stack_pointer);
+			
+		}
 		
 	} else if (self->type == GRAMMAR_PRINT) {
 		if (self->child_count) fprintf(yyout, "%smov a0 %s\tcal print\n", self->children[0]->ref_code, self->children[0]->ref);
