@@ -5,6 +5,7 @@
 	#include <stdlib.h>
 	#include <string.h>
 	#include <stdarg.h>
+	#include <stdint.h>
 	
 	extern void yyerror(const char* string);
 	extern int yylex(void);
@@ -42,6 +43,27 @@
 	#define GRAMMAR_CLASS 27
 	#define GRAMMAR_ACCESS 28
 	#define GRAMMAR_NEW 29
+	#define GRAMMAR_BUILTIN 30
+	
+	typedef struct {
+		char identifier[64];
+		uint64_t stack_pointer;
+		int scope_depth;
+		
+	} reference_t;
+	
+	typedef struct class_s {
+		char identifier[64];
+		int scope_depth;
+		int bytes;
+		
+		uint64_t class_count;
+		struct class_s* classes;
+		
+		uint64_t reference_count;
+		reference_t* references;
+		
+	} class_t;
 	
 	typedef struct node_s {
 		#define MAX_CHILDREN 16
@@ -50,6 +72,8 @@
 		struct node_s* children[MAX_CHILDREN];
 		
 		char* ref, *ref_code, *data;
+		uint64_t stack_pointer;
+		class_t* class;
 		int data_bytes, type, line;
 		
 	} node_t;
@@ -90,11 +114,11 @@
 	struct node_s* ast;
 }
 
-%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT NEW
+%token FUNC CLASS IF WHILE GOTO LAB RETURN VAR PRINT NEW 
 %nonassoc IFX
 %nonassoc ELSE
 
-%token <str> IDENTIFIER NUMBER
+%token <str> BUILTIN IDENTIFIER NUMBER
 %token <data> STRING
 %token NONTOKEN ERROR ENDFILE
 
@@ -152,10 +176,13 @@ expression
 	: NUMBER { $$ = new_node(yylineno, GRAMMAR_NUMBER, 0, $1, 0); }
 	| STRING { $$ = new_node(yylineno, GRAMMAR_STRING, $1.bytes, $1.data, 0); }
 	| NEW IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_NEW, 0, $2, 0); }
+	| expression '.' IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_ACCESS, 0, $3, 1, $1); }
 	| '(' IDENTIFIER ')' { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $2, 0); }
 	| IDENTIFIER { $$ = new_node(yylineno, GRAMMAR_IDENTIFIER, 0, $1, 0); }
 	| expression '(' ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 1, $1); }
 	| expression '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_CALL, 0, "", 2, $1, $3); }
+	| BUILTIN '(' ')' { $$ = new_node(yylineno, GRAMMAR_BUILTIN, 0, $1, 0); }
+	| BUILTIN '(' expression_list ')' { $$ = new_node(yylineno, GRAMMAR_BUILTIN, 0, $1, 1, $3); }
 	| '*' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "*", 2, $2, $4); }
 	| '?' expression '=' expression { $$ = new_node(yylineno, GRAMMAR_ASSIGN, 0, "?", 2, $2, $4); }
 	| '*' expression %prec UBDEREF { $$ = new_node(yylineno, GRAMMAR_UNARY, 0, "*", 1, $2); }
@@ -172,7 +199,6 @@ expression
 	| expression '-' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "*", 2, $1, $3); }
 	| expression '/' expression { $$ = new_node(yylineno, GRAMMAR_OPERATION, 0, "/", 2, $1, $3); }
-	| expression '.' expression { $$ = new_node(yylineno, GRAMMAR_ACCESS, 0, ".", 2, $1, $3); }
 	| '(' expression ')' { $$ = $2; }
 	;
 
@@ -191,34 +217,11 @@ argument_list
 	;
 %%
 
-#include <stdio.h>
-#include <stdint.h>
-
 void yyerror(const char* string) {
 	fflush(stdout);
 	fprintf(stderr, "*** %s, line %d\n", string, yylineno);
 	
 }
-
-typedef struct {
-	char identifier[64];
-	uint64_t stack_pointer;
-	int scope_depth;
-	
-} reference_t;
-
-typedef struct class_s {
-	char identifier[64];
-	int scope_depth;
-	int bytes;
-	
-	uint64_t class_count;
-	struct class_s* classes;
-	
-	uint64_t reference_count;
-	reference_t* references;
-	
-} class_t;
 
 static uint64_t stack_pointer = 0;
 static class_t main_class = {0};
@@ -305,26 +308,23 @@ void compile(node_t* self) {
 		return;
 		
 	} else if (self->type == GRAMMAR_ACCESS) {
-		class_t* class = (class_t*) 0;
-		for (int i = 0; i < current_class->class_count; i++) {
-			printf("%d\n", current_class->classes[i].scope_depth);
-			if (current_class->classes[i].scope_depth >= 0 && strncmp(current_class->classes[i].identifier, self->children[0]->data, sizeof(current_class->classes[i].identifier)) == 0) {
-				class = &current_class->classes[i];
+		compile(self->children[0]);
+		class_t* class = &current_class->classes[0]; // self->children[0]->class
+		
+		uint64_t offset = 0;
+		for (int i = 0; i < class->reference_count; i++) {
+			if (strcmp(class->references[i].identifier, self->data) == 0) {
+				self->ref_code = (char*) malloc(64);
+				sprintf(self->ref_code, "#access %ld + %ld# %scad %s add %ld\t", self->children[0]->stack_pointer, offset, self->children[0]->ref_code, self->children[0]->ref, offset);
+				
+				self->ref = "?ad";
 				break;
+				
+				printf("FOUND A MATCH IN CLASS %s offset %d\n", self->data, offset);
 				
 			}
 			
-		}
-		
-		printf("FUCK %s\n", class->identifier);
-		if (self->data[0] == '.') {
-			class_t* previous_class = current_class;
-			current_class = class;
-			compile(self->children[1]);
-			current_class = previous_class;
-			
-			generate_stack_entry(self);
-			fprintf(yyout, "%smov g0 %s\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			offset += 8;
 			
 		}
 		
@@ -471,7 +471,7 @@ void compile(node_t* self) {
 			
 			if (current_class->references[i].scope_depth >= 0 && strncmp(current_class->references[i].identifier, self->data, sizeof(current_class->references[i].identifier)) == 0) {
 				self->ref_code = (char*) malloc(64);
-				sprintf(self->ref_code, "cad bp sub %ld\t", current_class->references[i].stack_pointer);
+				sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = current_class->references[i].stack_pointer);
 				
 				self->ref = "?ad";
 				break;
@@ -498,9 +498,9 @@ void compile(node_t* self) {
 		
 	}
 	
-	/// TODO find me a name!
+	// calls
 	
-	else if (self->type == GRAMMAR_CALL) {
+	else if (self->type == GRAMMAR_CALL || self->type == GRAMMAR_BUILTIN) {
 		generate_stack_entry(self);
 		
 		node_t* expression_list_root = (node_t*) 0;
@@ -522,8 +522,9 @@ void compile(node_t* self) {
 			
 		}
 		
-		if (*self->data) {
+		if (self->type == GRAMMAR_BUILTIN) {
 			if (strcmp(self->data, "str") == 0) {
+				printf("MAY THIS BE IT\n");
 				uint64_t current_inline_id = inline_id++;
 				
 				fprintf(yyout,
@@ -532,7 +533,7 @@ void compile(node_t* self) {
 					"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current_inline_id, argument > 1 ? "g3" : "10", current_inline_id);
 				
 			} else {
-				printf("ERROR ON LINE %d\n", __LINE__);
+				printf("ERROR ON LINE %d %s\n", __LINE__, self->data);
 				
 			}
 			
@@ -650,6 +651,6 @@ int main(int argc, char* argv[]) {
 	
 	yyparse();
 	fclose(yyout);
-	//~ system("geany main.asm");
+	system("geany main.asm");
 	return 0; 
 }

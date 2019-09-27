@@ -62,6 +62,8 @@ WS  [ \t\v\n\f]
 "var"    return VAR;
 "new"    return NEW;
 
+"str" { yylval.str = strdup(yytext); return BUILTIN; } // builtins
+
 "++" return STROP_CAT; // string operators
 "%%" return STROP_FOR;
 
