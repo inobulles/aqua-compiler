@@ -254,6 +254,21 @@ class_t* create_class(class_t* self, char* identifier) {
 	
 }
 
+class_t* find_class_in_class(class_t* self, char* identifier) {
+	for (int i = 0; i < self->class_count; i++) {
+		class_t* class = find_class_in_class(&self->classes[i], identifier);
+		if (class) return class;
+		if (self->classes[i].scope_depth >= 0 && strncmp(self->classes[i].identifier, identifier, sizeof(self->classes[i].identifier)) == 0) return &self->classes[i];
+		
+	}
+	
+	return (class_t*) 0;
+	
+} class_t* find_class(char* identifier) {
+	return find_class_in_class(&main_class, identifier);
+	
+}
+
 uint64_t create_reference_in_class(class_t* self, char* identifier) {
 	if (self->references) self->references = (reference_t*) realloc(self->references, (self->reference_count + 1) * sizeof(reference_t));
 	else self->references = (reference_t*) malloc((self->reference_count + 1) * sizeof(reference_t));
@@ -296,36 +311,19 @@ void compile(node_t* self) {
 		fprintf(yyout, ":main:\tmov bp sp\tsub bp 1024\n");
 		
 	} else if (self->type == GRAMMAR_NEW) {
-		class_t* class = (class_t*) 0;
-		for (int i = 0; i < current_class->class_count; i++) {
-			if (current_class->classes[i].scope_depth >= 0 && strncmp(current_class->classes[i].identifier, self->data, sizeof(current_class->classes[i].identifier)) == 0) {
-				class = &current_class->classes[i];
-				break;
-				
-			}
-			
-		}
-		
-		self->class = class;
+		self->class = find_class(self->data);
 		generate_stack_entry(self);
-		fprintf(yyout, "mov a0 %d\tcal malloc\t%smov %s g0\n", class->bytes, self->ref_code, self->ref);
+		fprintf(yyout, "mov a0 %d\tcal malloc\t%smov %s g0\n", self->class->bytes, self->ref_code, self->ref);
 		
 		depth--;
 		return;
 		
 	} else if (self->type == GRAMMAR_ACCESS) {
 		self->access_class_object = self->children[0];
-		self->class = (class_t*) 0;
+		self->class = find_class(self->access_class_object->data);
 		self->self_zero = 1;
 		
-		for (int i = 0; i < current_class->class_count; i++) {
-			if (current_class->classes[i].scope_depth >= 0 && strncmp(current_class->classes[i].identifier, self->access_class_object->data, sizeof(current_class->classes[i].identifier)) == 0) {
-				self->class = &current_class->classes[i];
-				break;
-				
-			}
-			
-		} if (!self->class) {
+		if (!self->class) {
 			self->self_zero = 0;
 			compile(self->access_class_object);
 			self->class = self->access_class_object->class;
@@ -339,7 +337,7 @@ void compile(node_t* self) {
 			if (found) {
 				self->ref_code = (char*) malloc(64);
 				
-				if (self->class->references[i].is_function) sprintf(self->ref_code, "cad bp sub %ld\t", self->class->references[i].stack_pointer, offset);
+				if (self->class->references[i].is_function) sprintf(self->ref_code, "cad bp sub %ld\t", self->class->references[i].stack_pointer);
 				else sprintf(self->ref_code, "%scad %s add %ld\t", self->access_class_object->ref_code, self->access_class_object->ref, offset);
 				
 			} if (!self->class->references[i].is_function) {
@@ -389,11 +387,6 @@ void compile(node_t* self) {
 			
 		}
 		
-		for (int i = 0; i < class->reference_count; i++) {
-			printf("CLASS %s REFERENCE %d: %s\n", class->identifier, i, class->references[i].identifier);
-			
-		}
-		
 		depth--;
 		return;
 		
@@ -409,7 +402,8 @@ void compile(node_t* self) {
 			node_t* argument_list_root = self->children[1];
 			
 			while (argument_list_root) {
-				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference(argument_list_root->type == GRAMMAR_ARGUMENT_LIST ? argument_list_root->children[0]->data : argument_list_root->data), argument++);
+				fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", create_reference((argument_list_root->type == GRAMMAR_ARGUMENT_LIST ? argument_list_root->children[0] : argument_list_root)->data), argument++);
+				current_class->references[current_class->reference_count - 1].class = find_class((char*) (argument_list_root->type == GRAMMAR_ARGUMENT_LIST ? argument_list_root->children[0] : argument_list_root)->children[0]);
 				
 				if (argument_list_root->type == GRAMMAR_ARGUMENT_LIST) argument_list_root = argument_list_root->children[1];
 				else break;
@@ -500,7 +494,7 @@ void compile(node_t* self) {
 			
 			if (current_class->references[i].scope_depth >= 0 && strncmp(current_class->references[i].identifier, self->data, sizeof(current_class->references[i].identifier)) == 0) {
 				self->class = current_class->references[i].class;
-				printf("CLASS %s %lld\n", current_class->references[i].identifier, self->class);
+				printf("CLASS %s %p\n", current_class->references[i].identifier, self->class);
 				
 				self->ref_code = (char*) malloc(64);
 				sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = current_class->references[i].stack_pointer);
