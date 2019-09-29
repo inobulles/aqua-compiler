@@ -54,24 +54,19 @@ WS  [ \t\v\n\f]
 "else"   return ELSE;
 "while"  return WHILE;
 "func"   return FUNC;
-"class"  return CLASS;
-"goto"   return GOTO;
-"lab"    return LAB;
-"print"  return PRINT;
-"return" return RETURN;
 "var"    return VAR;
-"new"    return NEW;
 
-"str" { yylval.str = strdup(yytext); return BUILTIN; } // builtins
+"freeze" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
+"manual" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 
-"++" return STROP_CAT; // string operators
-"%%" return STROP_FOR;
+"++" return STR_CAT; // string operators
+"%%" return STR_FORMAT;
 
-"===" return STROP_EQ; // string comparison operators
-"!==" return STROP_NEQ;
+"===" return STR_CMP_EQ; // string comparison operators
+"!==" return STR_CMP_NEQ;
 
-"==" return CMPOP_EQ; // comparison operators
-"!=" return CMPOP_NEQ;
+"==" return CMP_EQ; // comparison operators
+"!=" return CMP_NEQ;
 
 "+" return '+'; // operators
 "-" return '-';
@@ -81,7 +76,6 @@ WS  [ \t\v\n\f]
 "&" return '&';
 "=" return '=';
 "." return '.';
-"->" return ARROW;
 
 ";" return ';'; // delimiters
 "," return ',';
@@ -93,8 +87,8 @@ WS  [ \t\v\n\f]
 "(" return '(';
 ")" return ')';
 
-{L}{A}* { yylval.str = strdup(yytext); return IDENTIFIER; } // literals
-{D}+ { yylval.str = strdup(yytext); return NUMBER; }
+{L}{A}* { yylval.data.data = strdup(yytext); return IDENTIFIER; } // literals
+{D}+ { yylval.data.data = strdup(yytext); return NUMBER; }
 
 {WS}+ // white spaces and other tokens
 .
