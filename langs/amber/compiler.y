@@ -27,7 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
-		GRAMM_VAR_DECL, // statements
+		GRAMM_VAR_DECL, GRAMM_IF, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
 	
@@ -83,6 +83,8 @@
 	}
 	
 	static uint64_t data_section_count = 0;
+	static uint64_t inline_count = 0;
+	
 	static uint64_t stack_pointer = 0;
 	static uint64_t depth = 0;
 	
@@ -178,6 +180,24 @@
 			}
 			
 			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, create_reference(self->data, (uint64_t) self->children[0])->stack_pointer);
+			
+		} else if (self->type == GRAMM_IF) {
+			compile(self->children[0]); // compile expression
+			
+			uint64_t current = inline_count++;
+			fprintf(yyout, "jmp $amber_inline_%ld_condition\t:$amber_inline_%ld:\n", current, current);
+			
+			compile(self->children[1]); // compile statement (after if expression)
+			
+			if (self->child_count > 2) { // has "else" statement
+				fprintf(yyout, "jmp $amber_inline_%ld_end\t:$amber_inline_%ld_condition:\t%scnd %s\tjmp $amber_inline_%ld\n", current, current, self->children[0]->ref_code, self->children[0]->ref, current);
+				compile(self->children[2]); // compile statement (after else)
+				fprintf(yyout, ":$amber_inline_%ld_end:\n", current);
+				
+			} else {
+				fprintf(yyout, "jmp $amber_inline_%ld_end\t:$amber_inline_%ld_condition:\t%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", current, current, self->children[0]->ref_code, self->children[0]->ref, current, current);
+				
+			}
 			
 		}
 		
@@ -296,6 +316,9 @@ statement
 	
 	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
 	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 1, $1); }
+	
+	| IF '(' expression ')' statement %prec IFX { $$ = new_node(GRAMM_IF, 0, "", 2, $3, $5); }
+	| IF '(' expression ')' statement ELSE statement { $$ = new_node(GRAMM_IF, 0, "", 3, $3, $5, $7); }
 	;
 
 expression
