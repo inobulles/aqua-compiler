@@ -27,7 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
-		GRAMM_UNARY, GRAMM_OPERATION, // arithmetic expressions
+		GRAMM_UNARY, GRAMM_ASSIGN, GRAMM_OPERATION, // arithmetic expressions
 		GRAMM_VAR_DECL, GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
@@ -156,17 +156,27 @@
 		
 		// expressions
 		
-		else if (self->type == GRAMM_UNARY) {
+		else if (self->type == GRAMM_ASSIGN) {
+			compile(self->children[0]);
+			compile(self->children[1]);
+			
+			generate_stack_entry(self);
+			
+			if (*self->data == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+			else if (*self->data == '*') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 1?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+			else if (*self->data == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+			
+		} else if (self->type == GRAMM_UNARY) {
 			compile(self->children[0]);
 			
 			generate_stack_entry(self);
 			char* code = "nop g0";
 			
-			if (self->data[0] == '-') code = "not g0\tadd g0 1";
-			else if (self->data[0] == '~') code = "not g0";
-			else if (self->data[0] == '*') code = "mov g0 1?g0";
-			else if (self->data[0] == '?') code = "mov g0 8?g0";
-			else if (self->data[0] == '&') code = "mov g0 ad";
+			if (*self->data == '-') code = "not g0\tadd g0 1";
+			else if (*self->data == '~') code = "not g0";
+			else if (*self->data == '*') code = "mov g0 1?g0";
+			else if (*self->data == '?') code = "mov g0 8?g0";
+			else if (*self->data == '&') code = "mov g0 ad";
 			
 			fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, code, self->ref_code, self->ref);
 			
@@ -337,7 +347,7 @@
 		
 		yyparse();
 		fclose(yyout);
-		system("geany main.asm");
+		//~ system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -413,12 +423,16 @@ expression
 	| expression expression { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
 	
-	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 2, $2); }
-	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 2, $2); }
-	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 2, $2); }
-	| '&' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 2, $2); }
-	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 2, $2); }
-	| '+' expression %prec UNARY_PLUS { $$ = new_node(GRAMM_UNARY, 0, "+", 2, $2); }
+	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 1, $2); }
+	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
+	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 1, $2); }
+	| '~' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 1, $2); }
+	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 1, $2); }
+	| '+' expression %prec UNARY_PLUS { $$ = $1; }
+	
+	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
+	| '*' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $2, $4); }
+	| '?' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $2, $4); }
 	;
 
 argument
