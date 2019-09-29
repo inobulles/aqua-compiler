@@ -4,6 +4,7 @@
 	#include <stdarg.h>
 	#include <stdint.h>
 	#include <stdlib.h>
+	#include <string.h>
 	
 	extern int yylex(void);
 	extern int yyparse(void);
@@ -97,7 +98,44 @@
 			compile(self->children[1]);
 			
 		} else if (self->type == GRAMM_CALL) {
+			if (strcmp(self->children[0]->data, "ret") == 0) { // return
+				compile(self->children[1]);
+				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
+				
+			} else {
+				compile(self->children[0]);
+				
+				node_t* expression_list_root = self->children[1];
+				uint64_t argument = 0;
+				
+				while (expression_list_root) {
+					argument++;
+					node_t* argument_node = expression_list_root;
+					
+					if (expression_list_root->type == GRAMM_LIST_EXPRESSION) {
+						argument_node = expression_list_root->children[0];
+						expression_list_root = expression_list_root->children[1];
+						
+					}
+					
+					compile(argument_node);
+					fprintf(yyout, "%spush %s\t", argument_node->ref_code, argument_node->ref);
+					
+					if (expression_list_root->type == GRAMM_EXPRESSION) {
+						break;
+						
+					}
+					
+				}
+				
+			}
 			
+		}
+		
+		// literals
+		
+		else if (self->type == GRAMM_NUMBER) {
+			self->ref = self->data;
 			
 		}
 		
@@ -131,7 +169,7 @@
 		
 		yyparse();
 		fclose(yyout);
-		//~ system("geany main.asm");
+		system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -161,10 +199,13 @@
 %left '*' '/'
 %left '?' '&'
 
-%type <abstract_syntax_tree> statement expression argument list_statement list_expression list_argument list_attribute
+%type <abstract_syntax_tree> program statement expression argument list_statement list_expression list_argument list_attribute
 
-%start list_statement
+%start program
 %%
+program
+	: list_statement { compile($1); }
+	;
 
 statement
 	: ';' { $$ = new_node(GRAMM_STATEMENT, 0, "", 0); }
