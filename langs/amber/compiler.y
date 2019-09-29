@@ -183,17 +183,22 @@
 			
 		} else if (self->type == GRAMM_UNARY) {
 			compile(self->children[0]);
-			
 			generate_stack_entry(self);
-			char* code = "nop g0";
 			
-			if (*self->data == '-') code = "not g0\tadd g0 1";
-			else if (*self->data == '~') code = "not g0";
-			else if (*self->data == '*') code = "mov g0 1?g0";
-			else if (*self->data == '?') code = "mov g0 8?g0";
-			else if (*self->data == '&') code = "mov g0 ad";
-			
-			fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, code, self->ref_code, self->ref);
+			if (*self->data == '&') {
+				fprintf(yyout, "%smov g0 ad\t%smov %s g0\n", self->children[0]->ref_code, self->ref_code, self->ref);
+				
+			} else {
+				char* code = "nop g0";
+				
+				if (*self->data == '-') code = "not g0\tadd g0 1";
+				else if (*self->data == '~') code = "not g0";
+				else if (*self->data == '*') code = "mov g0 1?g0";
+				else if (*self->data == '?') code = "mov g0 8?g0";
+				
+				fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, code, self->ref_code, self->ref);
+				
+			}
 			
 		} else if (self->type == GRAMM_CALL) {
 			if (strcmp(self->children[0]->data, "ret") == 0) { // return
@@ -216,6 +221,7 @@
 					while (expression_list_root) {
 						node_t* argument_node = expression_list_root;
 						
+						node_t* previous_expression_list_root = expression_list_root;
 						if (expression_list_root->type == GRAMM_LIST_EXPRESSION) {
 							argument_node = expression_list_root->children[0];
 							expression_list_root = expression_list_root->children[1];
@@ -223,10 +229,9 @@
 						}
 						
 						compile(argument_node);
-						fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument, argument_node->ref);
-						argument++;
+						fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument++, argument_node->ref);
 						
-						if (expression_list_root->type != GRAMM_LIST_EXPRESSION) {
+						if (previous_expression_list_root->type != GRAMM_LIST_EXPRESSION) {
 							break;
 							
 						}
@@ -436,7 +441,7 @@ expression
 	| '?' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $2, $4); }
 	
 	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 1, $2); }
-	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
+	//~ | '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
 	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 1, $2); }
 	| '~' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 1, $2); }
 	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 1, $2); }
