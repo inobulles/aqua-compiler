@@ -85,6 +85,7 @@
 	
 	static uint64_t data_section_count = 0;
 	static uint64_t inline_count = 0;
+	static uint64_t loop_count = 0;
 	
 	static uint64_t stack_pointer = 0;
 	static uint64_t depth = 0;
@@ -289,18 +290,18 @@
 			}
 			
 		} else if (self->type == GRAMM_WHILE) {
-			uint64_t current = inline_count++;
-			fprintf(yyout, "jmp $amber_inline_%ld_condition\t:$amber_inline_%ld:\n", current, current);
+			uint64_t current = loop_count++;
+			fprintf(yyout, "jmp $amber_loop_%ld_condition\t:$amber_loop_%ld:\n", current, current);
 			
 			compile(self->children[1]); // compile statement
-			fprintf(yyout, ":$amber_inline_%ld_condition:", current);
+			fprintf(yyout, ":$amber_loop_%ld_condition:", current);
 			
 			compile(self->children[0]); // compile expression
-			fprintf(yyout, "%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", self->children[0]->ref_code, self->children[0]->ref, current, current);
+			fprintf(yyout, "%scnd %s\tjmp $amber_loop_%ld\t:$amber_loop_%ld_end:\n", self->children[0]->ref_code, self->children[0]->ref, current, current);
 			
 		} else if (self->type == GRAMM_CONTROL) {
-			if (strcmp(self->data, "break") == 0) fprintf(yyout, "jmp $amber_inline_%ld_end\n", inline_count - 1);
-			else if (strcmp(self->data, "cont") == 0) fprintf(yyout, "jmp $amber_inline_%ld_condition\n", inline_count - 1);
+			if (strcmp(self->data, "break") == 0) fprintf(yyout, "jmp $amber_loop_%ld_end\n", loop_count - 1);
+			else if (strcmp(self->data, "cont") == 0) fprintf(yyout, "jmp $amber_loop_%ld_condition\n", loop_count - 1);
 			
 		}
 		
