@@ -49,13 +49,16 @@ WS  [ \t\v\n\f]
 "/*" comment(); // comments
 "//".*
 
-"if"     return IF; // statement keywords
-"else"   return ELSE;
-"while"  return WHILE;
-"func"   return FUNC;
+"if"    return IF; // statement keywords
+"else"  return ELSE;
+"while" return WHILE;
+"func"  return FUNC;
 
-"var"    return VAR; // data type keywords
-"byte"   return BYTE;
+"break" { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
+"cont"  { yylval.data.data = strdup(yytext); return CONTROL; }
+
+"var"  return VAR; // data type keywords
+"byte" return BYTE;
 
 "freeze" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
 "manual" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }

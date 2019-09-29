@@ -27,7 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
-		GRAMM_VAR_DECL, GRAMM_IF, // statements
+		GRAMM_VAR_DECL, GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
 	
@@ -116,6 +116,22 @@
 		
 	}
 	
+	/// TODO see if this is feasable
+	
+	//~ static uint64_t* current_recorded_allocation_count = (uint64_t*) 0;
+	
+	//~ void record_allocation(const char* pointer_ref, const char* bytes_ref) {
+		//~ fprintf(yyout, "psh %s\tpsh %s\t", pointer_ref, bytes_ref);
+		//~ (*current_recorded_allocation_count)++;
+		
+	//~ } void free_recorded_allocations(uint64_t recorded_allocation_count) {
+		//~ while (recorded_allocation_count--) {
+			//~ fprintf(yyout, "pop a1\tpop a0\tcal mfree\n");
+			
+		//~ }
+		
+	//~ }
+	
 	void compile(node_t* self) {
 		if (!self) return;
 		
@@ -127,8 +143,13 @@
 		// big syntax elements
 		
 		if (self->type == GRAMM_LIST_STATEMENT) {
+			//~ uint64_t recorded_allocation_count = 0;
+			//~ current_recorded_allocation_count = &recorded_allocation_count;
+			
 			compile(self->children[0]);
 			compile(self->children[1]);
+			
+			//~ free_recorded_allocations(recorded_allocation_count);
 			
 		}
 		
@@ -144,6 +165,7 @@
 					compile(self->children[1]);
 					fprintf(yyout, "%smov a0 %s\t", self->children[1]->ref_code, self->children[1]->ref);
 					fprintf(yyout, "cal malloc\t");
+					//~ record_allocation("g0", "a0");
 					
 				} else {
 					compile(self->children[0]);
@@ -227,6 +249,16 @@
 				
 			}
 			
+		} else if (self->type == GRAMM_WHILE) {
+			uint64_t current = inline_count++;
+			fprintf(yyout, "jmp $amber_inline_%ld_condition\t:$amber_inline_%ld:\n", current, current);
+			
+			compile(self->children[1]); // compile statement
+			fprintf(yyout, ":$amber_inline_%ld_condition:", current);
+			
+			compile(self->children[0]); // compile expression
+			fprintf(yyout, "%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", self->children[0]->ref_code, self->children[0]->ref, current, current);
+			
 		}
 		
 		// literals
@@ -304,7 +336,7 @@
 
 %token VAR BYTE
 
-%token <data> ATTRIBUTE IDENTIFIER NUMBER STRING
+%token <data> CONTROL ATTRIBUTE IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
 
 %nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_MINUS UNARY_PLUS
@@ -347,6 +379,9 @@ statement
 	
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(GRAMM_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(GRAMM_IF, 0, "", 3, $3, $5, $7); }
+	
+	| WHILE '(' expression ')' statement { $$ = new_node(GRAMM_WHILE, 0, "", 2, $3, $5); }
+	| CONTROL { $$ = new_node(GRAMM_CONTROL, 0, $1.data, 0); }
 	;
 
 expression
