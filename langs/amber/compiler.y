@@ -140,41 +140,49 @@
 				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
 				
 			} else {
-				compile(self->children[0]);
-				
-				node_t* expression_list_root = self->children[1];
-				uint64_t argument = 0;
-				
-				while (expression_list_root) {
-					node_t* argument_node = expression_list_root;
-					
-					if (expression_list_root->type == GRAMM_LIST_EXPRESSION) {
-						argument_node = expression_list_root->children[0];
-						expression_list_root = expression_list_root->children[1];
-						
-					}
-					
-					compile(argument_node);
-					fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument, argument_node->ref);
-					argument++;
-					
-					if (expression_list_root->type != GRAMM_LIST_EXPRESSION) {
-						break;
-						
-					}
-					
-				}
-				
-				if (strcmp(self->children[0]->data, "str") == 0) { // string builtin
-					uint64_t current = inline_count++;
-					
-					fprintf(yyout,
-						"%smov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
-						":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
-						"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current, argument > 1 ? "g3" : "10", current);
+				if (strcmp(self->children[0]->data, "new") == 0) { // new
+					compile(self->children[1]);
+					fprintf(yyout, "%smov a0 %s\t", self->children[1]->ref_code, self->children[1]->ref);
+					fprintf(yyout, "cal malloc\t");
 					
 				} else {
-					fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
+					compile(self->children[0]);
+					
+					node_t* expression_list_root = self->children[1];
+					uint64_t argument = 0;
+					
+					while (expression_list_root) {
+						node_t* argument_node = expression_list_root;
+						
+						if (expression_list_root->type == GRAMM_LIST_EXPRESSION) {
+							argument_node = expression_list_root->children[0];
+							expression_list_root = expression_list_root->children[1];
+							
+						}
+						
+						compile(argument_node);
+						fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument, argument_node->ref);
+						argument++;
+						
+						if (expression_list_root->type != GRAMM_LIST_EXPRESSION) {
+							break;
+							
+						}
+						
+					}
+					
+					if (strcmp(self->children[0]->data, "str") == 0) { // string builtin
+						uint64_t current = inline_count++;
+						
+						fprintf(yyout,
+							"%smov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
+							":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
+							"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current, argument > 1 ? "g3" : "10", current);
+						
+					} else {
+						fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
+						
+					}
 					
 				}
 				
