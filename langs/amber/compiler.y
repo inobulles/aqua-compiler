@@ -27,6 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
+		GRAMM_UNARY, GRAMM_OPERATION, // arithmetic expressions
 		GRAMM_VAR_DECL, GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
@@ -155,7 +156,21 @@
 		
 		// expressions
 		
-		else if (self->type == GRAMM_CALL) {
+		else if (self->type == GRAMM_UNARY) {
+			compile(self->children[0]);
+			
+			generate_stack_entry(self);
+			char* code = "nop g0";
+			
+			if (self->data[0] == '-') code = "not g0\tadd g0 1";
+			else if (self->data[0] == '~') code = "not g0";
+			else if (self->data[0] == '*') code = "mov g0 1?g0";
+			else if (self->data[0] == '?') code = "mov g0 8?g0";
+			else if (self->data[0] == '&') code = "mov g0 ad";
+			
+			fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, code, self->ref_code, self->ref);
+			
+		} else if (self->type == GRAMM_CALL) {
 			if (strcmp(self->children[0]->data, "ret") == 0) { // return
 				compile(self->children[1]);
 				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
@@ -343,7 +358,7 @@
 %token <data> CONTROL ATTRIBUTE IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
 
-%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_MINUS UNARY_PLUS
+%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS
 
 %left '='
 %left CMP_EQ CMP_NEQ
@@ -397,6 +412,13 @@ expression
 	
 	| expression expression { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
+	
+	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 2, $2); }
+	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 2, $2); }
+	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 2, $2); }
+	| '&' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 2, $2); }
+	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 2, $2); }
+	| '+' expression %prec UNARY_PLUS { $$ = new_node(GRAMM_UNARY, 0, "+", 2, $2); }
 	;
 
 argument
