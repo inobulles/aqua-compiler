@@ -88,8 +88,11 @@
 		
 	}
 	
+	static uint64_t data_section_count = 0;
+	
 	void compile(node_t* self) {
 		if (!self) return;
+		self->ref = self->data;
 		
 		printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 		
@@ -109,7 +112,6 @@
 				uint64_t argument = 0;
 				
 				while (expression_list_root) {
-					argument++;
 					node_t* argument_node = expression_list_root;
 					
 					if (expression_list_root->type == GRAMM_LIST_EXPRESSION) {
@@ -119,14 +121,17 @@
 					}
 					
 					compile(argument_node);
-					fprintf(yyout, "%spush %s\t", argument_node->ref_code, argument_node->ref);
+					fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument, argument_node->ref);
+					argument++;
 					
-					if (expression_list_root->type == GRAMM_EXPRESSION) {
+					if (expression_list_root->type != GRAMM_LIST_EXPRESSION) {
 						break;
 						
 					}
 					
 				}
+				
+				fprintf(yyout, "%scal %s\n", self->children[0]->ref_code, self->children[0]->ref);
 				
 			}
 			
@@ -134,8 +139,16 @@
 		
 		// literals
 		
-		else if (self->type == GRAMM_NUMBER) {
-			self->ref = self->data;
+		else if (self->type == GRAMM_IDENTIFIER) {
+			/// TODO check for references *FIRST*
+			
+		} else if (self->type == GRAMM_STRING) {
+			self->ref = (char*) malloc(32);
+			sprintf(self->ref, "$amber_data_%ld", data_section_count++);
+			
+			fprintf(yyout, "%%%s ", self->ref);
+			for (uint64_t i = 0; i < self->data_bytes; i++) fprintf(yyout, "x%x ", self->data[i]);
+			fprintf(yyout, "0%%\n");
 			
 		}
 		
@@ -219,7 +232,7 @@ expression
 	
 	| IDENTIFIER { $$ = new_node(GRAMM_IDENTIFIER, 0, $1.data, 0); }
 	| NUMBER { $$ = new_node(GRAMM_NUMBER, 0, $1.data, 0); }
-	| STRING { $$ = new_node(GRAMM_STRING, 0, $1.data, 0); }
+	| STRING { $$ = new_node(GRAMM_STRING, $1.bytes, $1.data, 0); }
 	
 	| expression expression { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }

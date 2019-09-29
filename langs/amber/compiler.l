@@ -39,7 +39,6 @@ WS  [ \t\v\n\f]
 <LEX_STRING>\\\" { *string++ = '"'; }
 <LEX_STRING>\" {
 	BEGIN 0;
-	*string++ = 0;
 	yylval.data.bytes = string - string_buffer;
 	yylval.data.data = malloc(yylval.data.bytes);
 	memcpy(yylval.data.data, string_buffer, yylval.data.bytes);
