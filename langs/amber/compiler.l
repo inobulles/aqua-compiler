@@ -53,7 +53,9 @@ WS  [ \t\v\n\f]
 "else"   return ELSE;
 "while"  return WHILE;
 "func"   return FUNC;
-"var"    return VAR;
+
+"var"    return VAR; // data type keywords
+"byte"   return BYTE;
 
 "freeze" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
 "manual" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }

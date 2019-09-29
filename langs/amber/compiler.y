@@ -20,23 +20,16 @@
 		
 	}
 	
-	#define GRAMM_PROGRAM 0
-	
-	#define GRAMM_STATEMENT 1
-	#define GRAMM_EXPRESSION 2
-	#define GRAMM_ARGUMENT 3
-	#define GRAMM_ATTRIBUTE 4
-	
-	#define GRAMM_LIST_STATEMENT 5
-	#define GRAMM_LIST_EXPRESSION 6
-	#define GRAMM_LIST_ARGUMENT 7
-	#define GRAMM_LIST_ATTRIBUTE 8
-	
-	#define GRAMM_IDENTIFIER 9
-	#define GRAMM_NUMBER 10
-	#define GRAMM_STRING 11
-	
-	#define GRAMM_CALL 12
+	enum grammar_e {
+		GRAMM_PROGRAM,
+		
+		GRAMM_STATEMENT, GRAMM_EXPRESSION, GRAMM_ARGUMENT, GRAMM_ATTRIBUTE, // big syntax elements
+		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
+		
+		GRAMM_CALL, // expressions
+		GRAMM_VAR_DECL, // statements
+		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
+	};
 	
 	typedef struct {
 		char identifier[64];
@@ -89,6 +82,25 @@
 	}
 	
 	static uint64_t data_section_count = 0;
+	static uint64_t stack_pointer = 0;
+	
+	static uint64_t reference_count = 0;
+	static reference_t* references = (reference_t*) 0;
+	
+	reference_t* create_reference(char* identifier, uint64_t bytes) {
+		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
+		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+		
+		memset(&references[reference_count], 0, sizeof(reference_t));
+		strncpy(references[reference_count].identifier, identifier, sizeof(references[reference_count].identifier));
+		
+		//~ references[reference_count].scope_depth = depth;
+		references[reference_count].bytes = bytes;
+		references[reference_count].stack_pointer = (stack_pointer += bytes - (stack_pointer - 1) % bytes + bytes - 1);
+		
+		return &references[reference_count++];
+		
+	}
 	
 	void compile(node_t* self) {
 		if (!self) return;
@@ -96,11 +108,17 @@
 		
 		printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 		
+		// big syntax elements
+		
 		if (self->type == GRAMM_LIST_STATEMENT) {
 			compile(self->children[0]);
 			compile(self->children[1]);
 			
-		} else if (self->type == GRAMM_CALL) {
+		}
+		
+		// expressions
+		
+		else if (self->type == GRAMM_CALL) {
 			if (strcmp(self->children[0]->data, "ret") == 0) { // return
 				compile(self->children[1]);
 				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
@@ -134,6 +152,24 @@
 				fprintf(yyout, "%scal %s\n", self->children[0]->ref_code, self->children[0]->ref);
 				
 			}
+			
+		}
+		
+		// statements
+		
+		else if (self->type == GRAMM_VAR_DECL) {
+			char* ref_code = "";
+			char* ref = "0";
+			
+			if (self->child_count > 1) { // is also assignment?
+				compile(self->children[1]);
+				
+				ref_code = self->children[1]->ref_code;
+				ref = self->children[1]->ref;
+				
+			}
+			
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, create_reference(self->data, (uint64_t) self->children[0])->stack_pointer);
 			
 		}
 		
@@ -194,9 +230,11 @@
 	struct node_s* abstract_syntax_tree;
 }
 
-%token FUNC IF WHILE RET VAR
+%token FUNC IF WHILE
 %nonassoc IFX
 %nonassoc ELSE
+
+%token VAR BYTE
 
 %token <data> ATTRIBUTE IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
@@ -212,19 +250,32 @@
 %left '*' '/'
 %left '?' '&'
 
-%type <abstract_syntax_tree> program statement expression argument list_statement list_expression list_argument list_attribute
+%type <abstract_syntax_tree> program data_type statement expression argument list_statement list_expression list_argument list_attribute
 
 %start program
 %%
-program
-	: list_statement { compile($1); }
+program:list_statement {
+	fprintf(yyout, "#####################################\n");
+	compile($1);
+	fprintf(yyout, "mov g0 0\tret\n");
+	rewind(yyout);
+	fprintf(yyout, ":main:\tmov bp sp\tsub bp %ld", stack_pointer);
+};
+
+data_type
+	: VAR { $$ = 8; }
+	| BYTE { $$ = 1; }
 	;
 
 statement
 	: ';' { $$ = new_node(GRAMM_STATEMENT, 0, "", 0); }
 	| expression ';' { $$ = $1; }
+	
 	| '{' '}' { $$ = new_node(GRAMM_LIST_STATEMENT, 0, "", 0); }
 	| '{' list_statement '}' { $$ = $2; }
+	
+	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
+	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 1, $1); }
 	;
 
 expression
