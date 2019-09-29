@@ -259,6 +259,10 @@
 			compile(self->children[0]); // compile expression
 			fprintf(yyout, "%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", self->children[0]->ref_code, self->children[0]->ref, current, current);
 			
+		} else if (self->type == GRAMM_CONTROL) {
+			if (strcmp(self->data, "break") == 0) fprintf(yyout, "jmp $amber_inline_%ld_end\n", inline_count - 1);
+			else if (strcmp(self->data, "cont") == 0) fprintf(yyout, "jmp $amber_inline_%ld_condition\n", inline_count - 1);
+			
 		}
 		
 		// literals
