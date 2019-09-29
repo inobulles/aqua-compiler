@@ -156,7 +156,21 @@
 		
 		// expressions
 		
-		else if (self->type == GRAMM_ASSIGN) {
+		else if (self->type == GRAMM_OPERATION) {
+			compile(self->children[0]);
+			compile(self->children[1]);
+			
+			generate_stack_entry(self);
+			char* instruction = "nop";
+			
+			if (self->data[0] == '+') instruction = "add";
+			else if (self->data[0] == '-') instruction = "sub";
+			else if (self->data[0] == '*') instruction = "mul";
+			else if (self->data[0] == '/') instruction = "div";
+			
+			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref);
+			
+		} else if (self->type == GRAMM_ASSIGN) {
 			compile(self->children[0]);
 			compile(self->children[1]);
 			
@@ -347,7 +361,7 @@
 		
 		yyparse();
 		fclose(yyout);
-		//~ system("geany main.asm");
+		system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -416,23 +430,30 @@ statement
 expression
 	: '(' expression ')' { $$ = $2; }
 	
-	| IDENTIFIER { $$ = new_node(GRAMM_IDENTIFIER, 0, $1.data, 0); }
-	| NUMBER { $$ = new_node(GRAMM_NUMBER, 0, $1.data, 0); }
-	| STRING { $$ = new_node(GRAMM_STRING, $1.bytes, $1.data, 0); }
-	
-	| expression expression { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
-	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
+	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
+	| '*' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $2, $4); }
+	| '?' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $2, $4); }
 	
 	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 1, $2); }
 	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
 	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 1, $2); }
 	| '~' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 1, $2); }
 	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 1, $2); }
-	| '+' expression %prec UNARY_PLUS { $$ = $1; }
+	| '+' expression %prec UNARY_PLUS { $$ = $2; }
 	
-	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
-	| '*' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $2, $4); }
-	| '?' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $2, $4); }
+	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
+	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
+	| expression '*' expression { $$ = new_node(GRAMM_OPERATION, 0, "*", 2, $1, $3); }
+	| expression '/' expression { $$ = new_node(GRAMM_OPERATION, 0, "/", 2, $1, $3); }
+	| expression '%' expression { $$ = new_node(GRAMM_OPERATION, 0, "%", 2, $1, $3); }
+	
+	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
+	| expression '(' ')' { $$ = new_node(GRAMM_CALL, 0, "", 1, $1); }
+	//| expression expression { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
+	
+	| IDENTIFIER { $$ = new_node(GRAMM_IDENTIFIER, 0, $1.data, 0); }
+	| NUMBER { $$ = new_node(GRAMM_NUMBER, 0, $1.data, 0); }
+	| STRING { $$ = new_node(GRAMM_STRING, $1.bytes, $1.data, 0); }
 	;
 
 argument
@@ -446,7 +467,7 @@ list_statement
 
 list_expression
 	: expression { $$ = $1; }
-	| expression list_expression { $$ = new_node(GRAMM_LIST_EXPRESSION, 0, "", 0); }
+	| expression ',' list_expression { $$ = new_node(GRAMM_LIST_EXPRESSION, 0, "", 2, $1, $3); }
 	;
 
 list_argument
