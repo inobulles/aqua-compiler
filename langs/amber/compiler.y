@@ -52,6 +52,7 @@
 		char* ref_code;
 		char* ref;
 		
+		uint64_t stack_pointer;
 		uint64_t data_bytes;
 		char* data;
 		
@@ -83,6 +84,7 @@
 	
 	static uint64_t data_section_count = 0;
 	static uint64_t stack_pointer = 0;
+	static uint64_t depth = 0;
 	
 	static uint64_t reference_count = 0;
 	static reference_t* references = (reference_t*) 0;
@@ -94,16 +96,22 @@
 		memset(&references[reference_count], 0, sizeof(reference_t));
 		strncpy(references[reference_count].identifier, identifier, sizeof(references[reference_count].identifier));
 		
-		//~ references[reference_count].scope_depth = depth;
+		references[reference_count].scope_depth = depth;
 		references[reference_count].bytes = bytes;
 		references[reference_count].stack_pointer = (stack_pointer += bytes - (stack_pointer - 1) % bytes + bytes - 1);
 		
 		return &references[reference_count++];
 		
+	} void decrement_depth(void) {
+		for (uint64_t i = 0; i < reference_count; i++) if (references[i].scope_depth > depth) references[i].scope_depth = -1;
+		depth--;
+		
 	}
 	
 	void compile(node_t* self) {
 		if (!self) return;
+		
+		depth++;
 		self->ref = self->data;
 		
 		printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
@@ -176,7 +184,17 @@
 		// literals
 		
 		else if (self->type == GRAMM_IDENTIFIER) {
-			/// TODO check for references *FIRST*
+			for (uint64_t i = 0; i < reference_count; i++) {
+				if (references[i].scope_depth >= 0 && strcmp(self->data, references[i].identifier) == 0) {
+					self->ref_code = (char*) malloc(32);
+					sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i].stack_pointer);
+					
+					self->ref = "?ad";
+					break;
+					
+				}
+				
+			}
 			
 		} else if (self->type == GRAMM_STRING) {
 			self->ref = (char*) malloc(32);
@@ -187,6 +205,8 @@
 			fprintf(yyout, "0%%\n");
 			
 		}
+		
+		decrement_depth();
 		
 	}
 	
@@ -263,8 +283,8 @@ program:list_statement {
 };
 
 data_type
-	: VAR { $$ = 8; }
-	| BYTE { $$ = 1; }
+	: VAR { $$ = (node_t*) 8; }
+	| BYTE { $$ = (node_t*) 1; }
 	;
 
 statement
