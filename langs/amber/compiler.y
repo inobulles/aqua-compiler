@@ -91,7 +91,13 @@
 	static uint64_t reference_count = 0;
 	static reference_t* references = (reference_t*) 0;
 	
-	reference_t* create_reference(char* identifier, uint64_t bytes) {
+	uint64_t generate_stack_entry(node_t* self) {
+		self->ref_code = (char*) malloc(32);
+		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer += 8 - (stack_pointer - 1) % 8 + 8 - 1);
+		self->ref = "?ad";
+		return stack_pointer;
+		
+	} reference_t* create_reference(char* identifier, uint64_t bytes) {
 		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
 		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
 		
@@ -159,7 +165,21 @@
 					
 				}
 				
-				fprintf(yyout, "%scal %s\n", self->children[0]->ref_code, self->children[0]->ref);
+				if (strcmp(self->children[0]->data, "str") == 0) { // string builtin
+					uint64_t current = inline_count++;
+					
+					fprintf(yyout,
+						"%smov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
+						":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
+						"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current, argument > 1 ? "g3" : "10", current);
+					
+				} else {
+					fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
+					
+				}
+				
+				generate_stack_entry(self);
+				fprintf(yyout, "%smov %s g0\n", self->ref_code, self->ref);
 				
 			}
 			
