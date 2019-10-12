@@ -32,17 +32,6 @@
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
 	
-	typedef struct {
-		char identifier[64];
-		
-		uint8_t function;
-		uint8_t bytes;
-		
-		uint64_t stack_pointer;
-		int64_t scope_depth;
-		
-	} reference_t;
-	
 	typedef struct node_s {
 		uint8_t child_count;
 		struct node_s* children[16];
@@ -53,7 +42,10 @@
 		char* ref_code;
 		char* ref;
 		
+		uint8_t width;
 		uint64_t stack_pointer;
+		int64_t scope_depth;
+		
 		uint64_t data_bytes;
 		char* data;
 		
@@ -91,7 +83,7 @@
 	static uint64_t depth = 0;
 	
 	static uint64_t reference_count = 0;
-	static reference_t* references = (reference_t*) 0;
+	static node_t** references = (node_t**) 0;
 	
 	uint64_t generate_stack_entry(node_t* self) {
 		self->ref_code = (char*) malloc(32);
@@ -99,40 +91,22 @@
 		self->ref = "?ad";
 		return stack_pointer;
 		
-	} reference_t* create_reference(char* identifier, uint64_t bytes) {
-		if (references) references = (reference_t*) realloc(references, (reference_count + 1) * sizeof(reference_t));
-		else references = (reference_t*) malloc((reference_count + 1) * sizeof(reference_t));
+	} uint64_t create_reference(node_t* self, uint8_t width) {
+		self->width = width;
+		self->scope_depth = depth;
+		self->stack_pointer = (stack_pointer += self->width - (stack_pointer - 1) % self->width + self->width - 1);
 		
-		memset(&references[reference_count], 0, sizeof(reference_t));
-		strncpy(references[reference_count].identifier, identifier, sizeof(references[reference_count].identifier));
+		if (references) references = (node_t**) realloc(references, (reference_count + 1) * sizeof(node_t*));
+		else references = (node_t**) malloc((reference_count + 1) * sizeof(node_t*));
 		
-		references[reference_count].scope_depth = depth;
-		references[reference_count].bytes = bytes;
-		references[reference_count].stack_pointer = (stack_pointer += bytes - (stack_pointer - 1) % bytes + bytes - 1);
-		
-		return &references[reference_count++];
+		references[reference_count] = self;
+		return reference_count++;
 		
 	} void decrement_depth(void) {
-		for (uint64_t i = 0; i < reference_count; i++) if (references[i].scope_depth > depth) references[i].scope_depth = -1;
+		for (uint64_t i = 0; i < reference_count; i++) if (references[i]->scope_depth > depth) references[i]->scope_depth = -1;
 		depth--;
 		
 	}
-	
-	/// TODO see if this is feasable
-	
-	//~ static uint64_t* current_recorded_allocation_count = (uint64_t*) 0;
-	
-	//~ void record_allocation(const char* pointer_ref, const char* bytes_ref) {
-		//~ fprintf(yyout, "psh %s\tpsh %s\t", pointer_ref, bytes_ref);
-		//~ (*current_recorded_allocation_count)++;
-		
-	//~ } void free_recorded_allocations(uint64_t recorded_allocation_count) {
-		//~ while (recorded_allocation_count--) {
-			//~ fprintf(yyout, "pop a1\tpop a0\tcal mfree\n");
-			
-		//~ }
-		
-	//~ }
 	
 	void compile(node_t* self) {
 		if (!self) return;
@@ -145,13 +119,8 @@
 		// big syntax elements
 		
 		if (self->type == GRAMM_LIST_STATEMENT) {
-			//~ uint64_t recorded_allocation_count = 0;
-			//~ current_recorded_allocation_count = &recorded_allocation_count;
-			
 			compile(self->children[0]);
 			compile(self->children[1]);
-			
-			//~ free_recorded_allocations(recorded_allocation_count);
 			
 		}
 		
@@ -210,7 +179,6 @@
 					compile(self->children[1]);
 					fprintf(yyout, "%smov a0 %s\t", self->children[1]->ref_code, self->children[1]->ref);
 					fprintf(yyout, "cal malloc\t");
-					//~ record_allocation("g0", "a0");
 					
 				} else {
 					compile(self->children[0]);
@@ -274,7 +242,8 @@
 				
 			}
 			
-			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, create_reference(self->data, (uint64_t) self->children[0])->stack_pointer);
+			create_reference(self, (uint8_t) self->children[0]);
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
 			
 		} else if (self->type == GRAMM_IF) {
 			compile(self->children[0]); // compile expression
@@ -314,9 +283,9 @@
 		
 		else if (self->type == GRAMM_IDENTIFIER) {
 			for (uint64_t i = 0; i < reference_count; i++) {
-				if (references[i].scope_depth >= 0 && strcmp(self->data, references[i].identifier) == 0) {
+				if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
 					self->ref_code = (char*) malloc(32);
-					sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i].stack_pointer);
+					sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i]->stack_pointer);
 					
 					self->ref = "?ad";
 					break;
@@ -367,7 +336,7 @@
 		
 		yyparse();
 		fclose(yyout);
-		system("geany main.asm");
+		//~ system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -387,7 +356,6 @@
 
 %token <data> CONTROL ATTRIBUTE IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
-
 %nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS
 
 %left '='
@@ -436,16 +404,17 @@ statement
 expression
 	: '(' expression ')' { $$ = $2; }
 	
-	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
 	| '*' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $2, $4); }
 	| '?' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $2, $4); }
 	
 	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 1, $2); }
-	//~ | '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
+	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
 	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 1, $2); }
 	| '~' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 1, $2); }
 	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 1, $2); }
 	| '+' expression %prec UNARY_PLUS { $$ = $2; }
+	
+	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
 	
 	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
