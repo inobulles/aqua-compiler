@@ -28,7 +28,8 @@
 		
 		GRAMM_CALL, // expressions
 		GRAMM_UNARY, GRAMM_ASSIGN, GRAMM_OPERATION, // arithmetic expressions
-		GRAMM_VAR_DECL, GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
+		GRAMM_VAR_DECL, GRAMM_FUNC, // declaration statements
+		GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
 	
@@ -228,7 +229,7 @@
 			
 		}
 		
-		// statements
+		// declaration statements
 		
 		else if (self->type == GRAMM_VAR_DECL) {
 			char* ref_code = "";
@@ -245,7 +246,37 @@
 			create_reference(self, (uint8_t) self->children[0]);
 			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
 			
-		} else if (self->type == GRAMM_IF) {
+		} else if (self->type == GRAMM_FUNC) {
+			depth++;
+			fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
+			
+			uint64_t argument = 0;
+			if (self->child_count > 1) { // has arguments?
+				node_t* argument_list_root = self->children[1];
+				while (argument_list_root) {
+					node_t* argument_node = argument_list_root->type == GRAMM_LIST_ARGUMENT ? argument_list_root->children[0] : argument_list_root;
+					create_reference(argument_node, (uint8_t) argument_node->children[0]);
+					fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", argument_node->stack_pointer, argument++);
+					
+					if (argument_list_root->type == GRAMM_LIST_ARGUMENT) argument_list_root = argument_list_root->children[1];
+					else break;
+					
+				}
+				
+			}
+			
+			compile(self->children[0]);
+			create_reference(self, 8);
+			decrement_depth();
+			
+			fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
+			fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", self->stack_pointer, self->data);
+			
+		}
+		
+		// statements
+		
+		else if (self->type == GRAMM_IF) {
 			compile(self->children[0]); // compile expression
 			
 			uint64_t current = inline_count++;
@@ -336,7 +367,7 @@
 		
 		yyparse();
 		fclose(yyout);
-		//~ system("geany main.asm");
+		system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -391,8 +422,11 @@ statement
 	| '{' '}' { $$ = new_node(GRAMM_LIST_STATEMENT, 0, "", 0); }
 	| '{' list_statement '}' { $$ = $2; }
 	
-	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
 	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 1, $1); }
+	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
+	
+	| FUNC IDENTIFIER statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 1, $3); }
+	| FUNC IDENTIFIER '(' list_argument ')' statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 2, $6, $4); }
 	
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(GRAMM_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(GRAMM_IF, 0, "", 3, $3, $5, $7); }
@@ -432,7 +466,7 @@ expression
 	;
 
 argument
-	:
+	: data_type IDENTIFIER { $$ = new_node(GRAMM_ARGUMENT, 0, $2.data, 1, $1); }
 	;
 
 list_statement

@@ -4,11 +4,11 @@
  * https://github.com/yihui-he/c0-compiler
  */
 
-D   [0-9]
-NZ  [1-9]
-L   [a-zA-Z_]
-A   [a-zA-Z_0-9]
-WS  [ \t\v\n\f]
+D [0-9]
+X [0-9A-Fa-f]
+L [a-zA-Z_]
+A [a-zA-Z_0-9]
+W [ \t\v\n\f]
 
 %option yylineno
 
@@ -92,9 +92,10 @@ WS  [ \t\v\n\f]
 ")" return ')';
 
 {L}{A}* { yylval.data.data = strdup(yytext); return IDENTIFIER; } // literals
+"0x"{X}+ { yylval.data.data = strdup(yytext + 1); printf("HEX NUMBER %s\n", yylval.data.data); return NUMBER; }
 {D}+ { yylval.data.data = strdup(yytext); return NUMBER; }
 
-{WS}+ // white spaces and other tokens
+{W}+ // white spaces and other tokens
 .
 %%
 
