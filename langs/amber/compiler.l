@@ -72,6 +72,10 @@ W [ \t\v\n\f]
 "==" return CMP_EQ; // comparison operators
 "!=" return CMP_NEQ;
 
+"and" return LOG_AND; // logical operators
+"or"  return LOG_OR;
+"xor" return LOG_XOR;
+
 "+" return '+'; // operators
 "-" return '-';
 "*" return '*';

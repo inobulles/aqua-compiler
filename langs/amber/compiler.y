@@ -27,7 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
-		GRAMM_UNARY, GRAMM_ASSIGN, GRAMM_OPERATION, // arithmetic expressions
+		GRAMM_ASSIGN, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_UNARY, // arithmetic expressions
 		GRAMM_VAR_DECL, GRAMM_FUNC, // declaration statements
 		GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
@@ -140,6 +140,19 @@
 			else if (self->data[0] == '/') instruction = "div";
 			
 			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref);
+			
+		} else if (self->type == GRAMM_LOGIC) {
+			compile(self->children[0]);
+			compile(self->children[1]);
+			
+			generate_stack_entry(self);
+			char* instruction = "nop";
+			
+			if (self->data[0] == '&') instruction = "and";
+			else if (self->data[0] == '^') instruction = "xor";
+			else if (self->data[0] == '|') instruction = "or";
+			
+			fprintf(yyout, /* normalize left */ "mov g0 0\t%scnd %s\tmov g0 1\t" /* normalize right */ "mov g1 0\t%scnd %s\tmov g1 1\t" /* operation */ "%s g0 g1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, instruction, self->ref_code, self->ref);
 			
 		} else if (self->type == GRAMM_ASSIGN) {
 			compile(self->children[0]);
@@ -390,8 +403,14 @@
 %nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS
 
 %left '='
+
+%left LOG_AND
+%left LOG_XOR
+%left LOG_OR
+
 %left CMP_EQ CMP_NEQ
 %left STR_CMP_EQ STR_CMP_NEQ
+
 %left STR_CAT STR_FORMAT
 
 %left '+' '-'
@@ -449,6 +468,10 @@ expression
 	| '+' expression %prec UNARY_PLUS { $$ = $2; }
 	
 	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
+	
+	| expression LOG_AND expression { $$ = new_node(GRAMM_LOGIC, 0, "&", 2, $1, $3); }
+	| expression LOG_XOR expression { $$ = new_node(GRAMM_LOGIC, 0, "^", 2, $1, $3); }
+	| expression LOG_OR  expression { $$ = new_node(GRAMM_LOGIC, 0, "|", 2, $1, $3); }
 	
 	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
