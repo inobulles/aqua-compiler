@@ -163,6 +163,9 @@
 			if (self->data[0] == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			else if (self->data[0] == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			
+			else if (self->data[0] == '>') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g2 g1\tcnd cf\tmov g0 0\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (self->data[0] == '<') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tnot zf\tcnd cf\tmov g0 0\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			
 		} else if (self->type == GRAMM_ASSIGN) {
 			compile(self->children[0]);
 			compile(self->children[1]);
@@ -389,7 +392,7 @@
 		
 		yyparse();
 		fclose(yyout);
-		system("geany main.asm");
+		//~ system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -418,6 +421,7 @@
 %left LOG_OR
 
 %left CMP_EQ CMP_NEQ
+%left CMP_GTE CMP_LTE CMP_GT CMP_LT
 %left STR_CMP_EQ STR_CMP_NEQ
 
 %left STR_CAT STR_FORMAT
@@ -484,6 +488,10 @@ expression
 	
 	| expression CMP_EQ  expression { $$ = new_node(GRAMM_COMPARE, 0, "=", 2, $1, $3); }
 	| expression CMP_NEQ expression { $$ = new_node(GRAMM_COMPARE, 0, "!", 2, $1, $3); }
+	| expression CMP_GTE expression { $$ = new_node(GRAMM_COMPARE, 0, "]", 2, $1, $3); }
+	| expression CMP_LTE expression { $$ = new_node(GRAMM_COMPARE, 0, "[", 2, $1, $3); }
+	| expression CMP_GT  expression { $$ = new_node(GRAMM_COMPARE, 0, ">", 2, $1, $3); }
+	| expression CMP_LT  expression { $$ = new_node(GRAMM_COMPARE, 0, "<", 2, $1, $3); }
 	
 	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
