@@ -115,7 +115,7 @@
 		depth++;
 		self->ref = self->data;
 		
-		printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
+		//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 		
 		// big syntax elements
 		
@@ -163,8 +163,10 @@
 			if (self->data[0] == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			else if (self->data[0] == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			
-			else if (self->data[0] == '>') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g2 g1\tcnd cf\tmov g0 0\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (self->data[0] == '<') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tnot zf\tcnd cf\tmov g0 0\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (self->data[0] == '<') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (self->data[0] == ']') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (self->data[0] == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\tnot zf\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (self->data[0] == '>') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tnot zf\tmov g2 zf\tcmp sf of\tcmp zf g1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			
 		} else if (self->type == GRAMM_ASSIGN) {
 			compile(self->children[0]);
@@ -210,6 +212,26 @@
 					compile(self->children[0]);
 					
 					node_t* expression_list_root = self->children[1];
+					while (expression_list_root) {
+						node_t* argument_node = expression_list_root;
+						
+						node_t* previous_expression_list_root = expression_list_root;
+						if (expression_list_root->type == GRAMM_LIST_EXPRESSION) {
+							argument_node = expression_list_root->children[0];
+							expression_list_root = expression_list_root->children[1];
+							
+						}
+						
+						compile(argument_node);
+						
+						if (previous_expression_list_root->type != GRAMM_LIST_EXPRESSION) {
+							break;
+							
+						}
+						
+					}
+					
+					expression_list_root = self->children[1];
 					uint64_t argument = 0;
 					
 					while (expression_list_root) {
@@ -222,7 +244,6 @@
 							
 						}
 						
-						compile(argument_node);
 						fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument++, argument_node->ref);
 						
 						if (previous_expression_list_root->type != GRAMM_LIST_EXPRESSION) {
