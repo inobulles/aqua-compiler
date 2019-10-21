@@ -84,6 +84,7 @@ W [ \t\v\n\f]
 "-" return '-';
 "*" return '*';
 "/" return '/';
+"%" return '%';
 "?" return '?';
 "&" return '&';
 "=" return '=';
@@ -100,7 +101,7 @@ W [ \t\v\n\f]
 ")" return ')';
 
 {L}{A}* { yylval.data.data = strdup(yytext); return IDENTIFIER; } // literals
-"0x"{X}+ { yylval.data.data = strdup(yytext + 1); printf("HEX NUMBER %s\n", yylval.data.data); return NUMBER; }
+"0x"{X}+ { yylval.data.data = strdup(yytext + 1); return NUMBER; }
 {D}+ { yylval.data.data = strdup(yytext); return NUMBER; }
 
 {W}+ // white spaces and other tokens

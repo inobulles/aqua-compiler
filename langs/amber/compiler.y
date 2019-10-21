@@ -138,8 +138,9 @@
 			else if (self->data[0] == '-') instruction = "sub";
 			else if (self->data[0] == '*') instruction = "mul";
 			else if (self->data[0] == '/') instruction = "div";
+			else if (self->data[0] == '%') instruction = "div";
 			
-			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref);
+			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s %s\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref, self->data[0] == '%' ? "a3" : "g0");
 			
 		} else if (self->type == GRAMM_LOGIC) {
 			compile(self->children[0]);
