@@ -478,7 +478,6 @@
 
 %token <data> CONTROL ATTRIBUTE IDENTIFIER NUMBER STRING
 %token NONTOKEN ERROR ENDFILE
-%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS
 
 %left '='
 
@@ -490,13 +489,13 @@
 %left CMP_GTE CMP_LTE CMP_GT CMP_LT
 
 %left '+' '-'
-%left '*' '/'
-%left '?' '&'
+%left '*' '/' '%'
 
 %left STR_CMP_EQ STR_CMP_NEQ
 %left STR_CAT STR_FORMAT
 
-%type <abstract_syntax_tree> program data_type statement expression argument list_statement list_expression list_argument list_attribute
+%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS
+%type <abstract_syntax_tree> program data_type left_pointer1 left_pointer8 statement expression argument list_statement list_expression list_argument list_attribute
 
 %start program
 %%
@@ -509,7 +508,7 @@ program:list_statement {
 };
 
 data_type
-	: VAR { $$ = (node_t*) 8; }
+	: VAR  { $$ = (node_t*) 8; }
 	| BYTE { $$ = (node_t*) 1; }
 	;
 
@@ -533,11 +532,14 @@ statement
 	| CONTROL { $$ = new_node(GRAMM_CONTROL, 0, $1.data, 0); }
 	;
 
+left_pointer1: '*' expression { $$ = $2; }
+left_pointer8: '?' expression { $$ = $2; }
+
 expression
 	: '(' expression ')' { $$ = $2; }
 	
-	| '*' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $2, $4); }
-	| '?' expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $2, $4); }
+	| left_pointer1 '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $1, $3); }
+	| left_pointer8 '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $1, $3); }
 	
 	| '*' expression %prec UNARY_BYTE_DEREF { $$ = new_node(GRAMM_UNARY, 0, "*", 1, $2); }
 	| '?' expression %prec UNARY_DEREF { $$ = new_node(GRAMM_UNARY, 0, "?", 1, $2); }
