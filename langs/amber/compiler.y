@@ -251,8 +251,7 @@
 			} else {
 				if (strcmp(self->children[0]->data, "new") == 0) { // new
 					compile(self->children[1]);
-					fprintf(yyout, "%smov a0 %s\t", self->children[1]->ref_code, self->children[1]->ref);
-					fprintf(yyout, "cal malloc\t");
+					fprintf(yyout, "%smov a0 %s\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tmov g0 a0\t", self->children[1]->ref_code, self->children[1]->ref);
 					
 				} else {
 					compile(self->children[0]);
