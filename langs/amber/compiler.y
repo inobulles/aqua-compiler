@@ -27,7 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
-		GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_UNARY, // arithmetic expressions
+		GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_UNARY, // arithmetic expressions
 		GRAMM_VAR_DECL, GRAMM_FUNC, // declaration statements
 		GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
@@ -168,6 +168,21 @@
 			else if (self->data[0] == ']') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			else if (self->data[0] == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\tnot zf\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			else if (self->data[0] == '>') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tnot zf\tmov g2 zf\tcmp sf of\tcmp zf g1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			
+		} else if (self->type == GRAMM_STR_COMPARE) {
+			compile(self->children[0]);
+			compile(self->children[1]);
+			
+			generate_stack_entry(self);
+			uint64_t current = inline_count++;
+			
+			fprintf(yyout,
+				"mov g0 %d\t%smov g1 %s\t%smov g2 %s\t:$amber_internal_seq_loop_inline_%ld:\n"
+				"cmp 1?g1 1?g2\txor zf 1\tcnd zf\tmov g0 %d\tcnd zf\tjmp $amber_internal_seq_loop_inline_%ld_end\n"
+				"cmp 1?g1 0\tcnd zf\tjmp $amber_internal_seq_loop_inline_%ld_end\n"
+				"cmp 1?g2 0\tcnd zf\tjmp $amber_internal_seq_loop_inline_%ld_end\n"
+				"add g1 1\tadd g2 1\tjmp $amber_internal_seq_loop_inline_%ld\n"
+				":$amber_internal_seq_loop_inline_%ld_end:\t%smov %s g0\n", *self->data == '=', self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, current, *self->data != '=', current, current, current, current, current, self->ref_code, self->ref);
 			
 		} else if (self->type == GRAMM_ASSIGN) {
 			compile(self->children[0]);
@@ -514,6 +529,9 @@ expression
 	| expression CMP_LTE expression { $$ = new_node(GRAMM_COMPARE, 0, "[", 2, $1, $3); }
 	| expression CMP_GT  expression { $$ = new_node(GRAMM_COMPARE, 0, ">", 2, $1, $3); }
 	| expression CMP_LT  expression { $$ = new_node(GRAMM_COMPARE, 0, "<", 2, $1, $3); }
+	
+	| expression STR_CMP_EQ  expression { $$ = new_node(GRAMM_STR_COMPARE, 0, "=", 2, $1, $3); }
+	| expression STR_CMP_NEQ expression { $$ = new_node(GRAMM_STR_COMPARE, 0, "!", 2, $1, $3); }
 	
 	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
