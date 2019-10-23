@@ -27,7 +27,7 @@
 		GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 		
 		GRAMM_CALL, // expressions
-		GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_UNARY, // arithmetic expressions
+		GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, // arithmetic expressions
 		GRAMM_VAR_DECL, GRAMM_FUNC, // declaration statements
 		GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
@@ -86,6 +86,8 @@
 	static uint64_t reference_count = 0;
 	static node_t** references = (node_t**) 0;
 	
+	static uint8_t has_defined_internal_send = 0;
+	
 	uint64_t generate_stack_entry(node_t* self) {
 		self->ref_code = (char*) malloc(32);
 		sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer += 8 - (stack_pointer - 1) % 8 + 8 - 1);
@@ -134,13 +136,41 @@
 			generate_stack_entry(self);
 			char* instruction = "nop";
 			
-			if (self->data[0] == '+') instruction = "add";
-			else if (self->data[0] == '-') instruction = "sub";
-			else if (self->data[0] == '*') instruction = "mul";
-			else if (self->data[0] == '/') instruction = "div";
-			else if (self->data[0] == '%') instruction = "div";
+			if (*self->data == '+') instruction = "add";
+			else if (*self->data == '-') instruction = "sub";
+			else if (*self->data == '*') instruction = "mul";
+			else if (*self->data == '/') instruction = "div";
+			else if (*self->data == '%') instruction = "div";
 			
-			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s %s\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref, self->data[0] == '%' ? "a3" : "g0");
+			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s %s\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref, *self->data == '%' ? "a3" : "g0");
+			
+		} else if (self->type == GRAMM_STR_OPERATION) {
+			compile(self->children[0]);
+			compile(self->children[1]);
+			
+			generate_stack_entry(self);
+			if (*self->data == '+') {
+				if (!has_defined_internal_send) {
+					has_defined_internal_send = 1;
+					fprintf(yyout,
+						"jmp $amber_internal_send_end\t:$amber_internal_send:\n"
+						"\tjmp $amber_internal_send_cond\t:$amber_internal_send_loop:\n"
+						"\t\tadd a0 1\n"
+						"\t\t:$amber_internal_send_cond:\tcnd 1?a0\tjmp $amber_internal_send_loop\tret\t:$amber_internal_send_end:\n");
+					
+				}
+				
+				fprintf(yyout,
+					"%smov g0 %s\t%smov g1 %s\n"
+					"mov g2 g0\tmov a0 g2\tcal $amber_internal_send\tmov g3 a0\tsub g3 g0\n"
+					"mov a0 g1\tcal $amber_internal_send\tmov a3 a0\tsub a3 g1\tadd a3 1\n"
+					"mov a0 g3\tadd a0 a3\tcal malloc\n"
+					"mov a0 g0\tmov a1 g2\tmov a2 g3\tcal mcpy\n"
+					"add a0 g3\tmov a1 g1\tmov a2 a3\tcal mcpy\n"
+					"mov g0 a0\tsub g0 g3\n"
+					"%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+				
+			}
 			
 		} else if (self->type == GRAMM_LOGIC) {
 			compile(self->children[0]);
@@ -149,9 +179,9 @@
 			generate_stack_entry(self);
 			char* instruction = "nop";
 			
-			if (self->data[0] == '&') instruction = "and";
-			else if (self->data[0] == '^') instruction = "xor";
-			else if (self->data[0] == '|') instruction = "or";
+			if (*self->data == '&') instruction = "and";
+			else if (*self->data == '^') instruction = "xor";
+			else if (*self->data == '|') instruction = "or";
 			
 			fprintf(yyout, /* normalize left */ "mov g0 0\t%scnd %s\tmov g0 1\t" /* normalize right */ "mov g1 0\t%scnd %s\tmov g1 1\t" /* operation */ "%s g0 g1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, instruction, self->ref_code, self->ref);
 			
@@ -161,13 +191,13 @@
 			
 			generate_stack_entry(self);
 			
-			if (self->data[0] == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (self->data[0] == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			if (*self->data == '=') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == '!') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%smov g2 %s\tcmp g1 g2\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			
-			else if (self->data[0] == '<') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (self->data[0] == ']') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (self->data[0] == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\tnot zf\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (self->data[0] == '>') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tnot zf\tmov g2 zf\tcmp sf of\tcmp zf g1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == '<') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == ']') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\tnot zf\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == '>') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tnot zf\tmov g2 zf\tcmp sf of\tcmp zf g1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			
 		} else if (self->type == GRAMM_STR_COMPARE) {
 			compile(self->children[0]);
@@ -459,13 +489,13 @@
 
 %left CMP_EQ CMP_NEQ
 %left CMP_GTE CMP_LTE CMP_GT CMP_LT
-%left STR_CMP_EQ STR_CMP_NEQ
-
-%left STR_CAT STR_FORMAT
 
 %left '+' '-'
 %left '*' '/'
 %left '?' '&'
+
+%left STR_CMP_EQ STR_CMP_NEQ
+%left STR_CAT STR_FORMAT
 
 %type <abstract_syntax_tree> program data_type statement expression argument list_statement list_expression list_argument list_attribute
 
@@ -530,14 +560,16 @@ expression
 	| expression CMP_GT  expression { $$ = new_node(GRAMM_COMPARE, 0, ">", 2, $1, $3); }
 	| expression CMP_LT  expression { $$ = new_node(GRAMM_COMPARE, 0, "<", 2, $1, $3); }
 	
-	| expression STR_CMP_EQ  expression { $$ = new_node(GRAMM_STR_COMPARE, 0, "=", 2, $1, $3); }
-	| expression STR_CMP_NEQ expression { $$ = new_node(GRAMM_STR_COMPARE, 0, "!", 2, $1, $3); }
-	
 	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(GRAMM_OPERATION, 0, "*", 2, $1, $3); }
 	| expression '/' expression { $$ = new_node(GRAMM_OPERATION, 0, "/", 2, $1, $3); }
 	| expression '%' expression { $$ = new_node(GRAMM_OPERATION, 0, "%", 2, $1, $3); }
+	
+	| expression STR_CMP_EQ  expression { $$ = new_node(GRAMM_STR_COMPARE, 0, "=", 2, $1, $3); }
+	| expression STR_CMP_NEQ expression { $$ = new_node(GRAMM_STR_COMPARE, 0, "!", 2, $1, $3); }
+	
+	| expression STR_CAT expression { $$ = new_node(GRAMM_STR_OPERATION, 0, "+", 2, $1, $3); }
 	
 	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
 	| expression '(' ')' { $$ = new_node(GRAMM_CALL, 0, "", 1, $1); }
