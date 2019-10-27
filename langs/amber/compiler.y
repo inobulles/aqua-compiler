@@ -196,8 +196,8 @@
 			
 			else if (*self->data == '<') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			else if (*self->data == ']') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (*self->data == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\tnot zf\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
-			else if (*self->data == '>') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tnot zf\tmov g2 zf\tcmp sf of\tcmp zf g1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\txor zf 1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			else if (*self->data == '>') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\txor zf 1\tmov g2 zf\tcmp sf of\tcmp zf g1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 			
 		} else if (self->type == GRAMM_STR_COMPARE) {
 			compile(self->children[0]);
@@ -458,7 +458,6 @@
 		
 		yyparse();
 		fclose(yyout);
-		//~ system("geany main.asm");
 		return 0; 
 	}
 %}
@@ -574,7 +573,6 @@ expression
 	
 	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
 	| expression '(' ')' { $$ = new_node(GRAMM_CALL, 0, "", 1, $1); }
-	//| expression expression { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	
 	| IDENTIFIER { $$ = new_node(GRAMM_IDENTIFIER, 0, $1.data, 0); }
 	| NUMBER { $$ = new_node(GRAMM_NUMBER, 0, $1.data, 0); }
