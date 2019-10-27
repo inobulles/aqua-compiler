@@ -54,8 +54,8 @@ W [ \t\v\n\f]
 "while" return WHILE;
 "func"  return FUNC;
 
-"break" { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
-"cont"  { yylval.data.data = strdup(yytext); return CONTROL; }
+"break"    { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
+"continue" { yylval.data.data = strdup(yytext); return CONTROL; }
 
 "var"  return VAR; // data type keywords
 "byte" return BYTE;

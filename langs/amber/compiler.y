@@ -244,7 +244,7 @@
 			}
 			
 		} else if (self->type == GRAMM_CALL) {
-			if (strcmp(self->children[0]->data, "ret") == 0) { // return
+			if (strcmp(self->children[0]->data, "return") == 0) { // return
 				compile(self->children[1]);
 				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
 				
