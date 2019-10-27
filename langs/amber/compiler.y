@@ -244,6 +244,8 @@
 			}
 			
 		} else if (self->type == GRAMM_CALL) {
+			printf("AWDUAMSUIHASODMAUISDJMUDHNSIUSADNI %s\n", self->children[0]->data);
+			
 			if (strcmp(self->children[0]->data, "return") == 0) { // return
 				compile(self->children[1]);
 				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
@@ -529,6 +531,8 @@ statement
 	
 	| WHILE '(' expression ')' statement { $$ = new_node(GRAMM_WHILE, 0, "", 2, $3, $5); }
 	| CONTROL { $$ = new_node(GRAMM_CONTROL, 0, $1.data, 0); }
+	
+	| expression list_expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	;
 
 left_pointer1: '*' expression { $$ = $2; }
