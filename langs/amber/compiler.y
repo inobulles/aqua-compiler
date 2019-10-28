@@ -87,6 +87,7 @@
 	static node_t** references = (node_t**) 0;
 	
 	static uint8_t has_defined_internal_send = 0;
+	static const char* argument_registers[] = {"a0", "a1", "a2", "a3", "g0", "g1", "g2", "g3"};
 	
 	uint64_t generate_stack_entry(node_t* self) {
 		self->ref_code = (char*) malloc(32);
@@ -244,8 +245,6 @@
 			}
 			
 		} else if (self->type == GRAMM_CALL) {
-			printf("AWDUAMSUIHASODMAUISDJMUDHNSIUSADNI %s\n", self->children[0]->data);
-			
 			if (strcmp(self->children[0]->data, "return") == 0) { // return
 				compile(self->children[1]);
 				fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
@@ -291,7 +290,7 @@
 							
 						}
 						
-						fprintf(yyout, "%smov a%ld %s\t", argument_node->ref_code, argument++, argument_node->ref);
+						fprintf(yyout, "%smov %s %s\t", argument_node->ref_code, argument_registers[argument++], argument_node->ref);
 						
 						if (previous_expression_list_root->type != GRAMM_LIST_EXPRESSION) {
 							break;
@@ -349,7 +348,7 @@
 				while (argument_list_root) {
 					node_t* argument_node = argument_list_root->type == GRAMM_LIST_ARGUMENT ? argument_list_root->children[0] : argument_list_root;
 					create_reference(argument_node, (uint8_t) argument_node->children[0]);
-					fprintf(yyout, "cad bp sub %ld\tmov ?ad a%d\n", argument_node->stack_pointer, argument++);
+					fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", argument_node->stack_pointer, argument_registers[argument++]);
 					
 					if (argument_list_root->type == GRAMM_LIST_ARGUMENT) argument_list_root = argument_list_root->children[1];
 					else break;
