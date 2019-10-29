@@ -137,7 +137,13 @@
 			generate_stack_entry(self);
 			char* instruction = "nop";
 			
-			if (*self->data == '+') instruction = "add";
+			if      (*self->data == '|') instruction = "or";
+			else if (*self->data == '^') instruction = "xor";
+			else if (*self->data == '&') instruction = "and";
+			else if (*self->data == '<') instruction = "shl";
+			else if (*self->data == '>') instruction = "shr";
+			else if (*self->data == 'r') instruction = "ror";
+			else if (*self->data == '+') instruction = "add";
 			else if (*self->data == '-') instruction = "sub";
 			else if (*self->data == '*') instruction = "mul";
 			else if (*self->data == '/') instruction = "div";
@@ -486,20 +492,25 @@
 
 %left '='
 
-%left LOG_AND
-%left LOG_XOR
 %left LOG_OR
+%left LOG_XOR
+%left LOG_AND
+
+%left '|'
+%left '^'
+%left '&'
 
 %left CMP_EQ CMP_NEQ
 %left CMP_GTE CMP_LTE CMP_GT CMP_LT
 
+%left SHL SHR ROR
 %left '+' '-'
 %left '*' '/' '%'
 
 %left STR_CMP_EQ STR_CMP_NEQ
 %left STR_CAT STR_FORMAT
 
-%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS
+%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS UNARY_NOT
 %type <abstract_syntax_tree> program data_type left_pointer1 left_pointer8 statement expression argument list_statement list_expression list_argument list_attribute
 
 %start program
@@ -569,6 +580,12 @@ expression
 	| expression CMP_GT  expression { $$ = new_node(GRAMM_COMPARE, 0, ">", 2, $1, $3); }
 	| expression CMP_LT  expression { $$ = new_node(GRAMM_COMPARE, 0, "<", 2, $1, $3); }
 	
+	| expression '|' expression { $$ = new_node(GRAMM_OPERATION, 0, "|", 2, $1, $3); }
+	| expression '^' expression { $$ = new_node(GRAMM_OPERATION, 0, "^", 2, $1, $3); }
+	| expression '&' expression { $$ = new_node(GRAMM_OPERATION, 0, "&", 2, $1, $3); }
+	| expression SHL expression { $$ = new_node(GRAMM_OPERATION, 0, "<", 2, $1, $3); }
+	| expression SHR expression { $$ = new_node(GRAMM_OPERATION, 0, ">", 2, $1, $3); }
+	| expression ROR expression { $$ = new_node(GRAMM_OPERATION, 0, "r", 2, $1, $3); }
 	| expression '+' expression { $$ = new_node(GRAMM_OPERATION, 0, "+", 2, $1, $3); }
 	| expression '-' expression { $$ = new_node(GRAMM_OPERATION, 0, "-", 2, $1, $3); }
 	| expression '*' expression { $$ = new_node(GRAMM_OPERATION, 0, "*", 2, $1, $3); }

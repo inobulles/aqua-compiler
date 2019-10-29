@@ -83,13 +83,19 @@ W [ \t\v\n\f]
 
 "+" return '+'; // operators
 "-" return '-';
+"!" return '!';
 "*" return '*';
 "/" return '/';
 "%" return '%';
 "?" return '?';
 "&" return '&';
 "=" return '=';
-"." return '.';
+"^" return '^';
+"|" return '|';
+
+"<<"  return SHL; // shift operators
+">>"  return ROR;
+">>>" return SHR; 
 
 ";" return ';'; // delimiters
 "," return ',';
