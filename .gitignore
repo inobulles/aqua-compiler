@@ -12,3 +12,4 @@ langs/c/objconv-src
 langs/c/main.o
 
 langs/amber/src
+langs/amber/lex.yy.c
