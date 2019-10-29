@@ -77,9 +77,9 @@ W [ \t\v\n\f]
 ">" return CMP_GT;
 "<" return CMP_LT;
 
-"and" return LOG_AND; // logical operators
-"or"  return LOG_OR;
-"xor" return LOG_XOR;
+("and")|("&&") return LOG_AND; // logical operators
+("or")|("||")  return LOG_OR;
+("xor")|("^^") return LOG_XOR;
 
 "+" return '+'; // operators
 "-" return '-';
