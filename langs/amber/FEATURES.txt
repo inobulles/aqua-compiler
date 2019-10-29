@@ -48,7 +48,8 @@ Debated features which may not implemented as stated or even implmented at all a
 - Integer modulo (%)
 - Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
 - Logical and (&&, and), or (||, or)
-+ Logical not (!, not)
+- Logical not (!, not)
+- Logical normalization (|, nrm)
 - Logical xor (^^, xor)
 - Unary minus (-)
 - Unary plus (+)
@@ -82,3 +83,7 @@ Debated features which may not implemented as stated or even implmented at all a
 - Hexadecimal integer literals
 + Binary integer literals
 + Single or multi-char literals
+
+=== BUILTINS ===
+
+- str(number, base) function to turn any number into a string representation with any base

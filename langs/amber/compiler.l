@@ -81,9 +81,8 @@ W [ \t\v\n\f]
 ("or")|("||")  return LOG_OR;
 ("xor")|("^^") return LOG_XOR;
 
-"+" return '+'; // operators
+"+" return '+'; // general operators
 "-" return '-';
-"!" return '!';
 "*" return '*';
 "/" return '/';
 "%" return '%';
@@ -91,7 +90,8 @@ W [ \t\v\n\f]
 "&" return '&';
 "=" return '=';
 "^" return '^';
-"|" return '|';
+("|")|("nrm") return '|';
+("!")|("not") return '!';
 
 "<<"  return SHL; // shift operators
 ">>"  return ROR;

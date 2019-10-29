@@ -245,6 +245,8 @@
 				else if (*self->data == '~') code = "not g0";
 				else if (*self->data == '*') code = "mov g0 1?g0";
 				else if (*self->data == '?') code = "mov g0 8?g0";
+				else if (*self->data == '|') code = "cmp g0 0\txor zf 1\tmov g0 zf";
+				else if (*self->data == '!') code = "cmp g0 0\tmov g0 zf";
 				
 				fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, code, self->ref_code, self->ref);
 				
@@ -510,7 +512,7 @@
 %left STR_CMP_EQ STR_CMP_NEQ
 %left STR_CAT STR_FORMAT
 
-%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS UNARY_NOT
+%nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS UNARY_NOT UNARY_NORM
 %type <abstract_syntax_tree> program data_type left_pointer1 left_pointer8 statement expression argument list_statement list_expression list_argument list_attribute
 
 %start program
@@ -565,6 +567,8 @@ expression
 	| '&' expression %prec UNARY_REF { $$ = new_node(GRAMM_UNARY, 0, "&", 1, $2); }
 	| '~' expression %prec UNARY_COMPL { $$ = new_node(GRAMM_UNARY, 0, "~", 1, $2); }
 	| '-' expression %prec UNARY_MINUS { $$ = new_node(GRAMM_UNARY, 0, "-", 1, $2); }
+	| '|' expression %prec UNARY_NORM { $$ = new_node(GRAMM_UNARY, 0, "|", 1, $2); }
+	| '!' expression %prec UNARY_NOT { $$ = new_node(GRAMM_UNARY, 0, "!", 1, $2); }
 	| '+' expression %prec UNARY_PLUS { $$ = $2; }
 	
 	| expression '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "=", 2, $1, $3); }
