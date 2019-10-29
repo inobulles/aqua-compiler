@@ -448,7 +448,7 @@
 		if (argc > 1) {
 			FILE* file = fopen(argv[1], "r");
 			if (!file) {
-				fprintf(stderr, "failed open");
+				fprintf(stderr, "WARNING Could not open file %s for reading\n", argv[1]);
 				exit(1);
 				
 			}
@@ -459,7 +459,7 @@
 			if (argc > 2) {
 				FILE* file = fopen(argv[2], "w");
 				if (!file) {
-					fprintf(stderr, "failed open");
+					fprintf(stderr, "WARNING Could not open file %s for writing\n", argv[2]);
 					exit(1);
 					
 				}

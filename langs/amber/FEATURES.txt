@@ -43,7 +43,6 @@ Debated features which may not implemented as stated or even implmented at all a
 
 === OPERATIONS ===
 
-* Casts to different types (<type name>(<thing to be cast>), such as int("9") == 9)
 - Integer addition (+), subtraction (-), multiplication (*), division (/)
 - Integer modulo (%)
 - Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
@@ -68,7 +67,6 @@ Debated features which may not implemented as stated or even implmented at all a
 
 - var
 - byte
-* str
 + flt
 * bool
 + [] (lists)
@@ -86,4 +84,5 @@ Debated features which may not implemented as stated or even implmented at all a
 
 === BUILTINS ===
 
++ Casts to different types (<type name>(<thing to be cast>), such as int("9") == 9)
 - str(number, base) function to turn any number into a string representation with any base
