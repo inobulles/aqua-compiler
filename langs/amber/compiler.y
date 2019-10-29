@@ -390,11 +390,16 @@
 			uint64_t current = loop_count++;
 			fprintf(yyout, "jmp $amber_loop_%ld_condition\t:$amber_loop_%ld:\n", current, current);
 			
-			compile(self->children[1]); // compile statement
+			compile(self->children[0]); // compile statement
 			fprintf(yyout, ":$amber_loop_%ld_condition:", current);
 			
-			compile(self->children[0]); // compile expression
-			fprintf(yyout, "%scnd %s\tjmp $amber_loop_%ld\t:$amber_loop_%ld_end:\n", self->children[0]->ref_code, self->children[0]->ref, current, current);
+			if (self->child_count > 1) { // has condition expression?
+				compile(self->children[1]); // compile expression
+				fprintf(yyout, "%scnd %s\t", self->children[1]->ref_code, self->children[1]->ref);
+				
+			}
+			
+			fprintf(yyout, "jmp $amber_loop_%ld\t:$amber_loop_%ld_end:\n", current, current);
 			
 		} else if (self->type == GRAMM_CONTROL) {
 			if (strcmp(self->data, "break") == 0) fprintf(yyout, "jmp $amber_loop_%ld_end\n", loop_count - 1);
@@ -470,7 +475,7 @@
 	struct node_s* abstract_syntax_tree;
 }
 
-%token FUNC IF WHILE
+%token FUNC IF WHILE LOOP
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -528,7 +533,8 @@ statement
 	| IF '(' expression ')' statement %prec IFX { $$ = new_node(GRAMM_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(GRAMM_IF, 0, "", 3, $3, $5, $7); }
 	
-	| WHILE '(' expression ')' statement { $$ = new_node(GRAMM_WHILE, 0, "", 2, $3, $5); }
+	| WHILE '(' expression ')' statement { $$ = new_node(GRAMM_WHILE, 0, "", 2, $5, $3); }
+	| LOOP statement { $$ = new_node(GRAMM_WHILE, 0, "", 1, $2); }
 	| CONTROL { $$ = new_node(GRAMM_CONTROL, 0, $1.data, 0); }
 	
 	| expression list_expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }

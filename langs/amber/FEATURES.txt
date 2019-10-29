@@ -24,8 +24,9 @@ Debated features which may not implemented as stated or even implmented at all a
 === STATEMENTS ===
 
 - if
-+ elif (else if) and else
-* always (I really like this, but I doubt people would take it very seriously lol. Anyways, I'm also torn on the name. Maybe simply "loop" is a better name?)
+- else
+* elif (else if)
+- loop
 * iterate (used to use this, but even I'm doubting its use, so I don't this this will ever happen)
 - while
 - continue
