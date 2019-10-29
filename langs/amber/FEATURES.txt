@@ -9,7 +9,7 @@ Debated features which may not implemented as stated or even implmented at all a
 
 - C-like flexible lexer
 - Abstract Syntax Tree generator that subdivides all statements into nested expressions and blocks and respects stuff like operator precedence
-+ Comments
+- Comments
 + Preprocessor for stuff like #alias
 + Automatic and manual memory managers, with their own special syntax and all
 
@@ -37,41 +37,38 @@ Debated features which may not implemented as stated or even implmented at all a
 - func (functions)
 + class (name spaces)
 - return
-- lab and goto
+* lab and goto
 - declarations
 
 === OPERATIONS ===
 
 * Casts to different types (<type name>(<thing to be cast>), such as int("9") == 9)
 - Integer addition (+), subtraction (-), multiplication (*), division (/)
-+ Integer modulo (%)
-+ Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
+- Integer modulo (%)
+- Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
 - Logical and (&&, and), or (||, or)
 + Logical not (!, not)
-* Logical xor (^^, xor)
+- Logical xor (^^, xor)
 - Unary minus (-)
-* Unary plus (+)
+- Unary plus (+)
 - Pointer reference (&), dereference (?) and byte dereference (*)
-- Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>)
++ Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>)
 - Two's complement (~)
 * Integer increment (++) and decrement (--)
-+ String concatenation (++) and string formatting (%%)
-+ String equivalency (===) and non-equivalency (!==) conditions
+- String concatenation (++)
+* String formatting (%%)
+- String equivalency (===) and non-equivalency (!==) conditions
 * String multiplication (**)
 - Assignment (=)
-- Self-assignment with all currently implemented operations (<operator>=)
++ Self-assignment with all currently implemented operations (<operator>=)
 
 === TYPES ===
 
-- int
-- uint
-- ftype (function type)
-+ * (pointers, can be just ints for now, but will have to be a fully-fledged system for dereference and reference operations)
-+ str
+- var
+- byte
+* str
 + flt
-+ bool
-+ char (single byte variables)
-+ uchar
+* bool
 + [] (lists)
 + class (data structures)
 
@@ -81,5 +78,6 @@ Debated features which may not implemented as stated or even implmented at all a
 - Decimal interger literals
 + Floating point literals
 + Array literals
-+ Hexadecimal and binary integer literals
+- Hexadecimal integer literals
++ Binary integer literals
 + Single or multi-char literals
