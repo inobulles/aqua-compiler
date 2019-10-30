@@ -344,7 +344,7 @@
 			}
 			
 			create_reference(self, (uint8_t) self->children[0]);
-			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov %d?ad g0\n", ref_code, ref, self->stack_pointer, self->children[0]);
 			
 		} else if (self->type == GRAMM_FUNC) {
 			depth++;
