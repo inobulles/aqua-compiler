@@ -344,7 +344,7 @@
 			}
 			
 			create_reference(self, (uint8_t) self->children[0]);
-			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov %d?ad g0\n", ref_code, ref, self->stack_pointer, self->width);
 			
 		} else if (self->type == GRAMM_FUNC) {
 			depth++;
@@ -423,7 +423,7 @@
 					self->ref_code = (char*) malloc(32);
 					sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i]->stack_pointer);
 					
-					self->ref = "?ad";
+					self->ref = (self->width = references[i]->width) == 8 ? "8?ad" : "1?ad";
 					break;
 					
 				}
