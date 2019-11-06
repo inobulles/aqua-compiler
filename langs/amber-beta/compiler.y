@@ -28,7 +28,7 @@
 		
 		GRAMM_CALL, // expressions
 		GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, // arithmetic expressions
-		GRAMM_VAR_DECL, GRAMM_FUNC, // declaration statements
+		GRAMM_VAR_DECL, GRAMM_CLASS, GRAMM_FUNC, // declaration statements
 		GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
@@ -483,7 +483,7 @@
 	struct node_s* abstract_syntax_tree;
 }
 
-%token FUNC IF WHILE LOOP
+%token CLASS FUNC IF WHILE LOOP
 %nonassoc IFX
 %nonassoc ELSE
 
@@ -539,6 +539,8 @@ statement
 	
 	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 1, $1); }
 	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
+	
+	| CLASS IDENTIFIER list_statement { $$ = new_node(GRAMM_CLASS, 0, $2.data, 1, $3); }
 	
 	| FUNC IDENTIFIER statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 1, $3); }
 	| FUNC IDENTIFIER '(' list_argument ')' statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 2, $6, $4); }

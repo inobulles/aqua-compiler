@@ -53,6 +53,7 @@ W [ \t\v\n\f]
 "else"  return ELSE;
 "while" return WHILE;
 "func"  return FUNC;
+"class" return CLASS;
 "loop"  return LOOP;
 
 "break"    { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
