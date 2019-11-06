@@ -1,13 +1,12 @@
 
 #!/bin/sh
 set -e
-echo "Compiling with Amber 1.0.0 stable ..."
+echo "Compiling with Amber 1.1.0 (beta) ..."
 
 rm -rf src
 mkdir -p src
-cp -r ../../code/* src
+cp -r ../../code/* srcflex compiler.l
 
-flex compiler.l
 yacc compiler.y -d
 
 gcc -O -c lex.yy.c -o lex.yy.o

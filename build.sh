@@ -31,32 +31,12 @@ if [ "$update" = "update" ]; then
 	cd ..
 fi
 
-if [ "$code" = "asm" ]; then
-	echo "Compiling asm code ..."
-	cp code/main.asm langs/asm/code.asm
-	cd langs/asm
-	sh build.sh
-	cd ../..
-elif [ "$code" = "amber" ]; then
-	echo "Compiling Amber code ..."
-	rm -rf langs/amber/src
-	mkdir -p langs/amber/src
-	cp -r code/* langs/amber/src
-	cd langs/amber
-	sh build.sh
-	cd ../..
-elif [ "$code" = "c" ]; then
-	echo "Compiling C code ... "
-	rm -rf langs/c/src
-	mkdir -p langs/c/src
-	cp -r lib langs/c/src
-	mv langs/c/src/lib/root.h langs/c/src/root.h
-	cp -r code/* langs/c/src
-	cd langs/c
+if [ -d langs/$code ]; then
+	cd langs/$code
 	sh build.sh
 	cd ../..
 else
-	echo "WARNING '$code' is not a valid programming language"
+	echo "WARNING The language '$code' does not seem to be available"
 	exit 1
 fi
 
