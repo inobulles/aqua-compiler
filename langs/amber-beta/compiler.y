@@ -28,7 +28,7 @@
 		
 		GRAMM_CALL, // expressions
 		GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, // arithmetic expressions
-		GRAMM_VAR_DECL, GRAMM_CLASS, GRAMM_FUNC, // declaration statements
+		GRAMM_VAR_DECL, GRAMM_FUNC, GRAMM_CLASS, // declaration statements
 		GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 		GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
 	};
@@ -343,7 +343,7 @@
 				
 			}
 			
-			create_reference(self, (uint8_t) self->children[0]);
+			create_reference(self, (uint8_t) (uint64_t) self->children[0]);
 			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
 			
 		} else if (self->type == GRAMM_FUNC) {
@@ -355,7 +355,7 @@
 				node_t* argument_list_root = self->children[1];
 				while (argument_list_root) {
 					node_t* argument_node = argument_list_root->type == GRAMM_LIST_ARGUMENT ? argument_list_root->children[0] : argument_list_root;
-					create_reference(argument_node, (uint8_t) argument_node->children[0]);
+					create_reference(argument_node, (uint8_t) (uint64_t) argument_node->children[0]);
 					fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", argument_node->stack_pointer, argument_registers[argument++]);
 					
 					if (argument_list_root->type == GRAMM_LIST_ARGUMENT) argument_list_root = argument_list_root->children[1];
@@ -371,6 +371,11 @@
 			
 			fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
 			fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", self->stack_pointer, self->data);
+			
+		} else if (self->type == GRAMM_CLASS) {
+			//~ depth++;
+			//~ create_class(self->data);
+			//~ compile(self->children[0]); // compile statement
 			
 		}
 		
