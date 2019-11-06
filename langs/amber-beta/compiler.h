@@ -113,9 +113,13 @@ uint64_t generate_stack_entry(node_t* self) {
 
 typedef struct class_s {
 	const char* name;
+	uint64_t depth;
 	
 	struct class_s* classes;
 	uint64_t class_count;
+	
+	node_t** functions;
+	uint64_t function_count;
 	
 } class_t;
 
@@ -133,13 +137,19 @@ void create_class(const char* name) {
 	else parent->classes = (class_t*) malloc(sizeof(class_t));
 	
 	class_t* self = &parent->classes[parent->class_count++];
+	
 	self->name = name;
+	self->depth = depth;
 	
 	class_stack[++class_stack_index] = self;
-	printf("Created class %s\n", name);
 	
-} void class_add_function(node_t* self /* function reference */) {
-	printf("TODO %s\n", __func__);
+} void class_add_function(node_t* function) {
+	class_t* self = class_stack[class_stack_index];
+	
+	if (self->function_count) self->functions = (node_t**) realloc(self->functions, (self->function_count + 1) * sizeof(node_t*));
+	else self->functions = (node_t**) malloc(sizeof(node_t*));
+	
+	self->functions[self->function_count++] = function;
 	
 } void exit_class(void) {
 	class_stack_index--;
