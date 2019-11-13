@@ -100,6 +100,7 @@ W [ \t\v\n\f]
 
 ";" return ';'; // delimiters
 "," return ',';
+"." return '.';
 
 "{" return '{'; // brackets
 "}" return '}';

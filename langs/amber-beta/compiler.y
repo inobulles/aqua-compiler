@@ -11,7 +11,7 @@
 }
 
 %token CLASS FUNC IF WHILE LOOP
-%nonassoc IFX
+%nonassoc IF_PREC
 %nonassoc ELSE
 
 %token VAR BYTE
@@ -40,6 +40,11 @@
 %left STR_CAT STR_FORMAT
 
 %nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS UNARY_NOT UNARY_NORM
+%nonassoc CALL_PREC
+%nonassoc '(' ')'
+%left '.'
+%nonassoc ABS_PREC
+
 %type <abstract_syntax_tree> program data_type left_pointer1 left_pointer8 statement expression argument list_statement list_expression list_argument list_attribute
 
 %start program
@@ -72,7 +77,7 @@ statement
 	| FUNC IDENTIFIER statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 1, $3); }
 	| FUNC IDENTIFIER '(' list_argument ')' statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 2, $6, $4); }
 	
-	| IF '(' expression ')' statement %prec IFX { $$ = new_node(GRAMM_IF, 0, "", 2, $3, $5); }
+	| IF '(' expression ')' statement %prec IF_PREC { $$ = new_node(GRAMM_IF, 0, "", 2, $3, $5); }
 	| IF '(' expression ')' statement ELSE statement { $$ = new_node(GRAMM_IF, 0, "", 3, $3, $5, $7); }
 	
 	| WHILE '(' expression ')' statement { $$ = new_node(GRAMM_WHILE, 0, "", 2, $5, $3); }
@@ -86,7 +91,7 @@ left_pointer1: '*' expression { $$ = $2; }
 left_pointer8: '?' expression { $$ = $2; }
 
 expression
-	: '(' expression ')' { $$ = $2; }
+	: '(' expression ')' %prec ABS_PREC { $$ = $2; }
 	
 	| left_pointer1 '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $1, $3); }
 	| left_pointer8 '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $1, $3); }
@@ -130,8 +135,10 @@ expression
 	
 	| expression STR_CAT expression { $$ = new_node(GRAMM_STR_OPERATION, 0, "+", 2, $1, $3); }
 	
-	| expression '(' list_expression ')' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
-	| expression '(' ')' { $$ = new_node(GRAMM_CALL, 0, "", 1, $1); }
+	| expression '.' expression { $$ = new_node(GRAMM_ACCESS, 0, "", 2, $1, $3); }
+	
+	| expression '(' list_expression ')' %prec CALL_PREC { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }
+	| expression '(' ')' %prec CALL_PREC { $$ = new_node(GRAMM_CALL, 0, "", 1, $1); }
 	
 	| IDENTIFIER { $$ = new_node(GRAMM_IDENTIFIER, 0, $1.data, 0); }
 	| NUMBER { $$ = new_node(GRAMM_NUMBER, 0, $1.data, 0); }
