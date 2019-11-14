@@ -45,7 +45,7 @@
 %left '.'
 %nonassoc ABS_PREC
 
-%type <abstract_syntax_tree> program data_type left_pointer1 left_pointer8 statement expression argument list_statement list_expression list_argument list_attribute
+%type <abstract_syntax_tree> program data_type statement left_pointer1 left_pointer8 expression argument list_statement list_expression list_argument list_attribute
 
 %start program
 %%

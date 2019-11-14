@@ -21,7 +21,7 @@ enum grammar_e {
 	GRAMM_PROGRAM,
 	
 	GRAMM_STATEMENT, GRAMM_EXPRESSION, GRAMM_ARGUMENT, GRAMM_ATTRIBUTE, // big syntax elements
-	GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
+	GRAMM_LIST_IDENTIFIER, GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 	
 	GRAMM_CALL, // expressions
 	GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, GRAMM_ACCESS, // arithmetic expressions
@@ -157,9 +157,7 @@ void compile(node_t* self) {
 	self->ref = self->data;
 	
 	if (self->parent) self->class = self->parent->class;
-	else {
-		self->class = &main_class;
-	}
+	else self->class = &main_class;
 	
 	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
@@ -513,8 +511,14 @@ void compile(node_t* self) {
 	decrement_depth();
 }
 
+extern char import_prefix[1024];
+
 int main(int argc, char* argv[]) {
 	if (argc > 1) {
+		uint64_t last_slash = 0;
+		for (uint64_t i = 0; i < strlen(argv[1]); i++) if (argv[1][i] == '/') last_slash = i;
+		memcpy(import_prefix, argv[1], last_slash + 1);
+		
 		FILE* file = fopen(argv[1], "r");
 		if (!file) {
 			fprintf(stderr, "WARNING Could not open file %s for reading\n", argv[1]);

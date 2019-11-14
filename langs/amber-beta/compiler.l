@@ -19,17 +19,19 @@ W [ \t\v\n\f]
 	
 	#include "y.tab.h"
 	
-	char string_buffer[100];
+	char string_buffer[1024];
 	char* string;
+	char import_prefix[1024] = {0};
 	
 	int yywrap(void);
 	static void comment(void);
 %}
 
 %x LEX_STRING
+%x LEX_IMPORT
 
 %%
-\" { BEGIN LEX_STRING; string = string_buffer; }
+\" { BEGIN LEX_STRING; string = string_buffer; } // string
 <LEX_STRING>\\n { *string++ = '\n'; }
 <LEX_STRING>\\t { *string++ = '\t'; }
 <LEX_STRING>\\b { *string++ = '\b'; }
@@ -46,15 +48,32 @@ W [ \t\v\n\f]
 }
 <LEX_STRING>. { *string++ = *yytext; }
 
+"import" BEGIN LEX_IMPORT; // import
+<LEX_IMPORT>[ \t]*
+<LEX_IMPORT>[^ \t\n;]+ {
+	BEGIN 0;
+	
+	char path[1024] = {0};
+	strcpy(path, import_prefix);
+	strcpy(path + strlen(path), yytext);
+	
+	if (!(yyin = fopen(path, "r"))) printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
+	else yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
+}
+<<EOF>> {
+	yypop_buffer_state();
+	if (!YY_CURRENT_BUFFER) yyterminate();
+}
+
 "/*" comment(); // comments
 "//".*
 
-"if"    return IF; // statement keywords
-"else"  return ELSE;
-"while" return WHILE;
-"func"  return FUNC;
-"class" return CLASS;
-"loop"  return LOOP;
+"if"     return IF; // statement keywords
+"else"   return ELSE;
+"while"  return WHILE;
+"func"   return FUNC;
+"class"  return CLASS;
+"loop"   return LOOP;
 
 "break"    { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
 "continue" { yylval.data.data = strdup(yytext); return CONTROL; }
@@ -63,7 +82,7 @@ W [ \t\v\n\f]
 "byte" return BYTE;
 
 "freeze" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
-"manual" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
+"global" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 
 "++" return STR_CAT; // string operators
 "%%" return STR_FORMAT;
