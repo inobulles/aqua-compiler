@@ -532,8 +532,8 @@ void compile(node_t* self) {
 			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
 				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
 					self->ref_code = (char*) malloc(128);
-					self->class = ((class_t*) self->class)->variables[i].class;
 					sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
+					self->class = ((class_t*) self->class)->variables[i].class;
 					
 					self->ref = "?ad";
 					stop = 1;
