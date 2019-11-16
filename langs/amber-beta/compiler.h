@@ -326,6 +326,7 @@ void compile(node_t* self) {
 			if (strcmp(self->children[0]->data, "new") == 0) { // new
 				compile(self->children[1]);
 				fprintf(yyout, "%smov a0 %s\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tmov g0 a0\t", self->children[1]->ref_code, self->children[1]->ref);
+				self->class = self->children[1]->class;
 			} else {
 				compile(self->children[0]);
 				
@@ -508,26 +509,37 @@ void compile(node_t* self) {
 				break;
 			}
 		} if (!stop) {
-			for (uint64_t i = 0; i < ((class_t*) self->class)->function_count; i++) {
-				if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
-					self->ref_code = (char*) malloc(32);
-					sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
+			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
+				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) { /// TODO
+					//~ self->ref_code = (char*) malloc(32);
+					//~ sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
 					
-					self->ref = "?ad";
+					//~ self->ref = "?ad";
 					stop = 1;
 					break;
 				}
 			} if (!stop) {
-				for (uint64_t i = 0; i < ((class_t*) self->class)->class_count; i++) {
-					if (strcmp(self->data, ((class_t*) self->class)->classes[i].name) == 0) {
-						self->ref_code = "";
-						self->ref = (char*) malloc(16);
+				for (uint64_t i = 0; i < ((class_t*) self->class)->function_count; i++) {
+					if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
+						self->ref_code = (char*) malloc(32);
+						sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
 						
-						self->class = &((class_t*) self->class)->classes[i];
-						sprintf(self->ref, "%ld", (uint64_t) ((class_t*) self->class)->bytes);
-						
+						self->ref = "?ad";
 						stop = 1;
 						break;
+					}
+				} if (!stop) {
+					for (uint64_t i = 0; i < ((class_t*) self->class)->class_count; i++) {
+						if (strcmp(self->data, ((class_t*) self->class)->classes[i].name) == 0) {
+							self->ref_code = "";
+							self->ref = (char*) malloc(16);
+							
+							self->class = &((class_t*) self->class)->classes[i];
+							sprintf(self->ref, "%ld", (uint64_t) ((class_t*) self->class)->bytes);
+							
+							stop = 1;
+							break;
+						}
 					}
 				}
 			}
