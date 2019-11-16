@@ -437,6 +437,9 @@ void compile(node_t* self) {
 			fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
 		}
 		
+		uint8_t prev_compiling_class = compiling_class;
+		compiling_class = 0;
+		
 		uint64_t argument = 0;
 		if (self->child_count > 1) { // has arguments?
 			node_t* argument_list_root = self->children[1];
@@ -445,13 +448,16 @@ void compile(node_t* self) {
 				create_reference(argument_node, (uint8_t) (uint64_t) argument_node->children[0]);
 				fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", argument_node->stack_pointer, argument_registers[argument++]);
 				
+				if (argument_node->child_count > 1) { // has a specific class
+					compile(argument_node->children[1]);
+					argument_node->class = argument_node->children[1]->class;
+				}
+				
 				if (argument_list_root->type == GRAMM_LIST_ARGUMENT) argument_list_root = argument_list_root->children[1];
 				else break;
 			}
 		}
 		
-		uint8_t prev_compiling_class = compiling_class;
-		compiling_class = 0;
 		compile(self->children[0]);
 		compiling_class = prev_compiling_class;
 		

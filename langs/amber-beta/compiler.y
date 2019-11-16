@@ -152,6 +152,7 @@ expression
 
 argument
 	: data_type IDENTIFIER { $$ = new_node(GRAMM_ARGUMENT, 0, $2.data, 1, $1); }
+	| expression CAST data_type IDENTIFIER { $$ = new_node(GRAMM_ARGUMENT, 0, $4.data, 2, $3, $1); }
 	;
 
 list_statement
