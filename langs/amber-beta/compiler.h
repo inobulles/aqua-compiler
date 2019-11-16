@@ -114,6 +114,7 @@ typedef struct {
 	const char* name;
 	uint8_t bytes;
 	uint64_t offset;
+	void* class;
 	
 	const char* initial_value_ref_code;
 	const char* initial_value_ref;
@@ -169,6 +170,7 @@ void create_class(const char* name) {
 	
 	self->variables[self->variable_count].name = declaration->data;
 	self->variables[self->variable_count].bytes = bytes;
+	self->variables[self->variable_count].class = declaration->class;
 	
 	self->variables[self->variable_count].offset = self->bytes;
 	self->bytes += 8;
@@ -401,9 +403,15 @@ void compile(node_t* self) {
 		char* ref_code = "";
 		char* ref = "0";
 		
-		if (self->child_count > 1) { // is also assignment?
+		uint8_t class = self->data_bytes;
+		if (class) {
+			compile(self->children[self->child_count - 1]);
+			self->class = self->children[self->child_count - 1]->class;
+		}
+		
+		if ((self->child_count > 1 && !class) || (self->child_count > 2 && class)) { // is also assignment?
 			compile(self->children[1]);
-			self->class = self->children[1]->class;
+			if (!class) self->class = self->children[1]->class;
 			
 			ref_code = self->children[1]->ref_code;
 			ref = self->children[1]->ref;
@@ -524,6 +532,7 @@ void compile(node_t* self) {
 			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
 				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
 					self->ref_code = (char*) malloc(128);
+					self->class = ((class_t*) self->class)->variables[i].class;
 					sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
 					
 					self->ref = "?ad";

@@ -73,6 +73,9 @@ statement
 	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 1, $1); }
 	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
 	
+	| expression CAST data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 1, $4.data, 2, $3, $1); }
+	| expression CAST data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 1, $4.data, 3, $3, $6, $1); }
+	
 	| CLASS IDENTIFIER '{' list_statement '}' { $$ = new_node(GRAMM_CLASS, 0, $2.data, 1, $4); }
 	
 	| FUNC IDENTIFIER statement { $$ = new_node(GRAMM_FUNC, 0, $2.data, 1, $3); }
