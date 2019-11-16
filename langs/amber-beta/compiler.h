@@ -87,7 +87,7 @@ static uint64_t reference_count = 0;
 static node_t** references = (node_t**) 0;
 
 static uint8_t has_defined_internal_send = 0;
-static const char* argument_registers[] = {"a0", "a1", "a2", "a3", "g0", "g1", "g2", "g3"};
+static const char* argument_registers[] = {"a0", "a1", "a2", "a3", "g0", "g1", "g2"};
 
 uint64_t generate_stack_entry(node_t* self) {
 	self->ref_code = (char*) malloc(32);
@@ -388,6 +388,8 @@ void compile(node_t* self) {
 						":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
 						"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current, argument > 1 ? "g3" : "10", current);
 				} else {
+					if (self->children[0]->child_count && self->children[0]->children[1]->parent) fprintf(yyout, "%smov g3 %s\t", self->children[0]->children[1]->parent->ref_code, self->children[0]->children[1]->parent->ref);
+					else fprintf(yyout, "mov g3 0\t");
 					fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
 				}
 			}
@@ -457,6 +459,11 @@ void compile(node_t* self) {
 				else break;
 			}
 		}
+		
+		node_t* imaginary_self_node = new_node(GRAMM_VAR_DECL, 0, "self", 0);
+		imaginary_self_node->class = class_stack[class_stack_index];
+		create_reference(imaginary_self_node, 8);
+		fprintf(yyout, "cad bp sub %ld\tmov ?ad g3\n", imaginary_self_node->stack_pointer);
 		
 		compile(self->children[0]);
 		compiling_class = prev_compiling_class;
@@ -537,7 +544,7 @@ void compile(node_t* self) {
 		} if (!stop) {
 			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
 				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
-					self->ref_code = (char*) malloc(128);
+					self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
 					sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
 					self->class = ((class_t*) self->class)->variables[i].class;
 					
@@ -549,6 +556,7 @@ void compile(node_t* self) {
 				for (uint64_t i = 0; i < ((class_t*) self->class)->function_count; i++) {
 					if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
 						self->ref_code = (char*) malloc(32);
+						printf("AYSIYAOSUASNDAISNDASHDNASJHDN %s %s %s\n", self->data, self->parent->ref_code, self->parent->ref);
 						sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
 						
 						self->ref = "?ad";
