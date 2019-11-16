@@ -185,7 +185,7 @@ void compile(node_t* self) {
 	self->ref = self->data;
 	
 	if (self->parent) self->class = self->parent->class;
-	else self->class = &main_class;
+	else self->class = class_stack[class_stack_index];
 	
 	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
@@ -323,7 +323,11 @@ void compile(node_t* self) {
 			compile(self->children[1]);
 			fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
 		} else {
-			if (strcmp(self->children[0]->data, "new") == 0) { // new
+			if (strcmp(self->children[0]->data, "classof") == 0) { // classof
+				compile(self->children[1]);
+				fprintf(yyout, "%%$amber_class_name_%ld \"%s\" 0%%\tmov g0 $amber_class_name_%ld\t", data_section_count, ((class_t*) self->children[1]->class)->name, data_section_count);
+				data_section_count++;
+			} else if (strcmp(self->children[0]->data, "new") == 0) { // new
 				compile(self->children[1]);
 				fprintf(yyout, "%smov a0 %s\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tmov g0 a0\t", self->children[1]->ref_code, self->children[1]->ref);
 				self->class = self->children[1]->class;
@@ -510,11 +514,11 @@ void compile(node_t* self) {
 			}
 		} if (!stop) {
 			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
-				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) { /// TODO
-					//~ self->ref_code = (char*) malloc(32);
-					//~ sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
+				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
+					self->ref_code = (char*) malloc(128);
+					sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
 					
-					//~ self->ref = "?ad";
+					self->ref = "?ad";
 					stop = 1;
 					break;
 				}
