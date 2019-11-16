@@ -40,6 +40,7 @@
 %left STR_CAT STR_FORMAT
 
 %nonassoc UNARY_BYTE_DEREF UNARY_DEREF UNARY_REF UNARY_COMPL UNARY_MINUS UNARY_PLUS UNARY_NOT UNARY_NORM
+%left CAST
 %nonassoc CALL_PREC
 %nonassoc '(' ')'
 %left '.'
@@ -135,6 +136,7 @@ expression
 	
 	| expression STR_CAT expression { $$ = new_node(GRAMM_STR_OPERATION, 0, "+", 2, $1, $3); }
 	
+	| expression CAST expression { $$ = new_node(GRAMM_CAST, 0, "", 2, $1, $3); }
 	| expression '.' expression { $$ = new_node(GRAMM_ACCESS, 0, "", 2, $1, $3); }
 	
 	| expression '(' list_expression ')' %prec CALL_PREC { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $3); }

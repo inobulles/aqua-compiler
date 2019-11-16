@@ -119,7 +119,9 @@ W [ \t\v\n\f]
 
 ";" return ';'; // delimiters
 "," return ',';
-"." return '.';
+
+"." return '.'; // class stuff
+"->" return CAST;
 
 "{" return '{'; // brackets
 "}" return '}';

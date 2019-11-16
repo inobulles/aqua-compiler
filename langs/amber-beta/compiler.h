@@ -24,7 +24,8 @@ enum grammar_e {
 	GRAMM_LIST_IDENTIFIER, GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
 	
 	GRAMM_CALL, // expressions
-	GRAMM_ASSIGN, GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, GRAMM_ACCESS, // arithmetic expressions
+	GRAMM_ASSIGN, GRAMM_CAST, // class stuff
+	GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, GRAMM_ACCESS, // arithmetic expressions
 	GRAMM_VAR_DECL, GRAMM_FUNC, GRAMM_CLASS, // declaration statements
 	GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
 	GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
@@ -206,6 +207,13 @@ void compile(node_t* self) {
 		
 		self->ref = self->children[1]->ref;
 		self->ref_code = self->children[1]->ref_code;
+	} else if (self->type == GRAMM_CAST) {
+		compile(self->children[0]);
+		compile(self->children[1]);
+		
+		self->class = self->children[0]->class;
+		self->ref = self->children[1]->ref;
+		self->ref_code = self->children[1]->ref_code;
 	} else if (self->type == GRAMM_OPERATION) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -325,7 +333,7 @@ void compile(node_t* self) {
 		} else {
 			if (strcmp(self->children[0]->data, "classof") == 0) { // classof
 				compile(self->children[1]);
-				fprintf(yyout, "%%$amber_class_name_%ld \"%s\" 0%%\tmov g0 $amber_class_name_%ld\t", data_section_count, ((class_t*) self->children[1]->class)->name, data_section_count);
+				fprintf(yyout, "%%$amber_class_name_%ld \"%s<%p>\" 0%%\tmov g0 $amber_class_name_%ld\t", data_section_count, ((class_t*) self->children[1]->class)->name, self->children[1]->class, data_section_count);
 				data_section_count++;
 			} else if (strcmp(self->children[0]->data, "new") == 0) { // new
 				compile(self->children[1]);
