@@ -109,15 +109,28 @@ uint64_t generate_stack_entry(node_t* self) {
 
 // class helper functions
 
+typedef struct {
+	const char* name;
+	uint8_t bytes;
+	uint64_t offset;
+	
+	const char* initial_value_ref_code;
+	const char* initial_value_ref;
+} class_variable_t;
+
 typedef struct class_s {
 	const char* name;
 	uint64_t depth;
+	uint64_t bytes;
 	
 	struct class_s* classes;
 	uint64_t class_count;
 	
 	node_t** functions;
 	uint64_t function_count;
+	
+	class_variable_t* variables;
+	uint64_t variable_count;
 } class_t;
 
 static class_t main_class = { .name = "Main" };
@@ -134,6 +147,7 @@ void create_class(const char* name) {
 	else parent->classes = (class_t*) malloc(sizeof(class_t));
 	
 	class_t* self = &parent->classes[parent->class_count++];
+	memset(self, 0, sizeof(*self));
 	
 	self->name = name;
 	self->depth = depth;
@@ -146,6 +160,20 @@ void create_class(const char* name) {
 	else self->functions = (node_t**) malloc(sizeof(node_t*));
 	
 	self->functions[self->function_count++] = function;
+} void class_add_variable(node_t* declaration, uint8_t bytes, const char* value_ref_code, const char* value_ref) {
+	class_t* self = class_stack[class_stack_index];
+	
+	if (self->variable_count) self->variables = (class_variable_t*) realloc(self->variables, (self->variable_count + 1) * sizeof(class_variable_t));
+	else self->variables = (class_variable_t*) malloc(sizeof(class_variable_t));
+	
+	self->variables[self->variable_count].name = declaration->data;
+	self->variables[self->variable_count].bytes = bytes;
+	
+	self->variables[self->variable_count].offset = self->bytes;
+	self->bytes += 8;
+	
+	self->variables[self->variable_count].initial_value_ref_code = value_ref_code;
+	self->variables[self->variable_count++].initial_value_ref = value_ref;
 } void exit_class(void) {
 	class_stack_index--;
 }
@@ -368,9 +396,14 @@ void compile(node_t* self) {
 			ref = self->children[1]->ref;
 		}
 		
-		create_reference(self, (uint8_t) (uint64_t) self->children[0]);
-		fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
+		uint8_t bytes = (uint8_t) (uint64_t) self->children[0];
 		
+		if (compiling_class) {
+			class_add_variable(self, bytes, ref_code, ref);
+		} else {
+			create_reference(self, bytes);
+			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
+		}
 	} else if (self->type == GRAMM_FUNC) {
 		uint8_t local = 1; /// TODO global attribute
 		uint64_t current_func_id;
@@ -491,7 +524,7 @@ void compile(node_t* self) {
 						self->ref = (char*) malloc(16);
 						
 						self->class = &((class_t*) self->class)->classes[i];
-						sprintf(self->ref, "%ld", (uint64_t) self->class);
+						sprintf(self->ref, "%ld", (uint64_t) ((class_t*) self->class)->bytes);
 						
 						stop = 1;
 						break;
