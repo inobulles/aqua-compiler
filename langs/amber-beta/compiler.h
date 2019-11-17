@@ -173,7 +173,7 @@ void create_class(const char* name) {
 	self->variables[self->variable_count].class = declaration->class;
 	
 	self->variables[self->variable_count].offset = self->bytes;
-	self->bytes += 8;
+	self->bytes += bytes - (self->bytes - 1) % bytes + bytes - 1;
 	
 	self->variables[self->variable_count].initial_value_ref_code = value_ref_code;
 	self->variables[self->variable_count++].initial_value_ref = value_ref;
@@ -556,7 +556,6 @@ void compile(node_t* self) {
 				for (uint64_t i = 0; i < ((class_t*) self->class)->function_count; i++) {
 					if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
 						self->ref_code = (char*) malloc(32);
-						printf("AYSIYAOSUASNDAISNDASHDNASJHDN %s %s %s\n", self->data, self->parent->ref_code, self->parent->ref);
 						sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
 						
 						self->ref = "?ad";
