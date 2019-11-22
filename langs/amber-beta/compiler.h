@@ -41,6 +41,7 @@ typedef struct node_s {
 	uint8_t type;
 	int line;
 	
+	uint8_t is_raw_class_name;
 	char* ref_code;
 	char* ref;
 	
@@ -190,7 +191,7 @@ void compile(node_t* self) {
 	if (self->parent) self->class = self->parent->class;
 	else self->class = class_stack[class_stack_index];
 	
-	printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
+	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
 	// big syntax elements
 	
@@ -388,8 +389,13 @@ void compile(node_t* self) {
 						":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
 						"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current, argument > 1 ? "g3" : "10", current);
 				} else {
-					if (self->children[0]->child_count && self->children[0]->children[1]->parent) fprintf(yyout, "%smov g3 %s\t", self->children[0]->children[1]->parent->ref_code, self->children[0]->children[1]->parent->ref);
-					else fprintf(yyout, "mov g3 0\t");
+					uint8_t statically_called = 1;
+					if (self->children[0]->child_count && !self->children[0]->children[1]->parent->is_raw_class_name) {
+						statically_called = 0;
+						fprintf(yyout, "%smov g3 %s\t", self->children[0]->children[1]->parent->ref_code, self->children[0]->children[1]->parent->ref);
+					}
+					
+					if (statically_called) fprintf(yyout, "mov g3 0\t");
 					fprintf(yyout, "%scal %s\t", self->children[0]->ref_code, self->children[0]->ref);
 				}
 			}
@@ -531,18 +537,23 @@ void compile(node_t* self) {
 	else if (self->type == GRAMM_IDENTIFIER) {
 		uint8_t stop = 0;
 		
-		for (uint64_t i = 0; i < ((class_t*) self->class)->class_count; i++) {
-			if (strcmp(self->data, ((class_t*) self->class)->classes[i].name) == 0) {
-				self->ref_code = "";
-				self->ref = (char*) malloc(16);
-				
-				self->class = &((class_t*) self->class)->classes[i];
-				sprintf(self->ref, "%ld", (uint64_t) ((class_t*) self->class)->bytes);
-				
-				stop = 1;
-				break;
+		for (int64_t j = sizeof(class_stack) / sizeof(*class_stack) - 1; !stop && j >= 0; j--) {
+			class_t* current = class_stack[j];
+			
+			if (current) for (uint64_t i = 0; i < current->class_count; i++) {
+				if (strcmp(self->data, current->classes[i].name) == 0) {
+					self->ref_code = "";
+					self->ref = (char*) malloc(16);
+					
+					self->is_raw_class_name = 1;
+					self->class = &current->classes[i];
+					sprintf(self->ref, "%ld", (uint64_t) current->bytes);
+					
+					stop = 1;
+					break;
+				}
 			}
-		} if (!stop && (class_stack[class_stack_index - 1] == &main_class || self->class == &main_class)) for (uint64_t i = 0; i < reference_count; i++) {
+		} if (!stop && (class_stack_index == 1 || self->class == &main_class)) for (uint64_t i = 0; i < reference_count; i++) {
 			if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
 				self->class = references[i]->class;
 				self->ref_code = (char*) malloc(32);
@@ -552,7 +563,7 @@ void compile(node_t* self) {
 				stop = 1;
 				break;
 			}
-		} else if (!stop) {
+		} /*else*/ if (!stop) {
 			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
 				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
 					self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
