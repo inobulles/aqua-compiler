@@ -190,7 +190,7 @@ void compile(node_t* self) {
 	if (self->parent) self->class = self->parent->class;
 	else self->class = class_stack[class_stack_index];
 	
-	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
+	printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
 	// big syntax elements
 	
@@ -531,7 +531,18 @@ void compile(node_t* self) {
 	else if (self->type == GRAMM_IDENTIFIER) {
 		uint8_t stop = 0;
 		
-		for (uint64_t i = 0; i < reference_count; i++) {
+		for (uint64_t i = 0; i < ((class_t*) self->class)->class_count; i++) {
+			if (strcmp(self->data, ((class_t*) self->class)->classes[i].name) == 0) {
+				self->ref_code = "";
+				self->ref = (char*) malloc(16);
+				
+				self->class = &((class_t*) self->class)->classes[i];
+				sprintf(self->ref, "%ld", (uint64_t) ((class_t*) self->class)->bytes);
+				
+				stop = 1;
+				break;
+			}
+		} if (!stop && (class_stack[class_stack_index - 1] == &main_class || self->class == &main_class)) for (uint64_t i = 0; i < reference_count; i++) {
 			if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
 				self->class = references[i]->class;
 				self->ref_code = (char*) malloc(32);
@@ -541,7 +552,7 @@ void compile(node_t* self) {
 				stop = 1;
 				break;
 			}
-		} if (!stop) {
+		} else if (!stop) {
 			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
 				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
 					self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
@@ -561,19 +572,6 @@ void compile(node_t* self) {
 						self->ref = "?ad";
 						stop = 1;
 						break;
-					}
-				} if (!stop) {
-					for (uint64_t i = 0; i < ((class_t*) self->class)->class_count; i++) {
-						if (strcmp(self->data, ((class_t*) self->class)->classes[i].name) == 0) {
-							self->ref_code = "";
-							self->ref = (char*) malloc(16);
-							
-							self->class = &((class_t*) self->class)->classes[i];
-							sprintf(self->ref, "%ld", (uint64_t) ((class_t*) self->class)->bytes);
-							
-							stop = 1;
-							break;
-						}
 					}
 				}
 			}
