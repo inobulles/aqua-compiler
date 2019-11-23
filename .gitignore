@@ -1,7 +1,6 @@
 rom.zed
 rom.asm
 code
-lib
 
 langs/asm/a.out
 langs/asm/code.asm
@@ -13,3 +12,4 @@ langs/c/main.o
 
 langs/amber*/src
 langs/amber*/lex.yy.c
+langs/amber*/lib

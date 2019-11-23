@@ -18,22 +18,9 @@ while test $# -gt 0; do
 	shift
 done
 
-if [ ! -d "lib" ]; then
-	echo "Downloading lib ..."
-	git clone $git_prefix/inobulles/aqua-lib --depth 1 -b master
-	mv aqua-lib lib
-fi
-
-if [ "$update" = "update" ]; then
-	echo "Updating lib ..."
-	cd lib
-	git pull origin master
-	cd ..
-fi
-
 if [ -d langs/$code ]; then
 	cd langs/$code
-	sh build.sh
+	sh build.sh $update git-prefix $git_prefix
 	cd ../..
 else
 	echo "WARNING The language '$code' does not seem to be available"
