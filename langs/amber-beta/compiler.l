@@ -23,6 +23,9 @@ W [ \t\v\n\f]
 	char* string;
 	char import_prefix[1024] = {0};
 	
+	char* already_imported[4096];
+	int already_imported_count = 0;
+	
 	int yywrap(void);
 	static void comment(void);
 %}
@@ -57,8 +60,20 @@ W [ \t\v\n\f]
 	strcpy(path, import_prefix);
 	strcpy(path + strlen(path), yytext);
 	
-	if (!(yyin = fopen(path, "r"))) printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
-	else yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
+	uint8_t import = 1;
+	for (int i = 0; i < already_imported_count; i++) {
+		if (strcmp(path, already_imported[i])) {
+			import = 0;
+			break;
+		}
+	}
+	
+	if (import) {
+		already_imported[already_imported_count++] = path;
+		
+		if (!(yyin = fopen(path, "r"))) printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
+		else yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
+	}
 }
 <<EOF>> {
 	yypop_buffer_state();

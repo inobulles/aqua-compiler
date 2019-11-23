@@ -113,7 +113,7 @@ uint64_t generate_stack_entry(node_t* self) {
 
 typedef struct {
 	const char* name;
-	uint8_t bytes;
+	uint64_t bytes;
 	uint64_t offset;
 	void* class;
 	
@@ -126,6 +126,7 @@ typedef struct class_s {
 	uint64_t depth;
 	uint64_t bytes;
 	
+	struct class_s* parent;
 	struct class_s* classes;
 	uint64_t class_count;
 	
@@ -151,6 +152,7 @@ void create_class(const char* name) {
 	
 	class_t* self = &parent->classes[parent->class_count++];
 	memset(self, 0, sizeof(*self));
+	self->parent = parent;
 	
 	self->name = name;
 	self->depth = depth;
@@ -163,18 +165,18 @@ void create_class(const char* name) {
 	else self->functions = (node_t**) malloc(sizeof(node_t*));
 	
 	self->functions[self->function_count++] = function;
-} void class_add_variable(node_t* declaration, uint8_t bytes, const char* value_ref_code, const char* value_ref) {
+} void class_add_variable(node_t* declaration, uint8_t bytes, uint64_t times, const char* value_ref_code, const char* value_ref) {
 	class_t* self = class_stack[class_stack_index];
 	
 	if (self->variable_count) self->variables = (class_variable_t*) realloc(self->variables, (self->variable_count + 1) * sizeof(class_variable_t));
 	else self->variables = (class_variable_t*) malloc(sizeof(class_variable_t));
 	
 	self->variables[self->variable_count].name = declaration->data;
-	self->variables[self->variable_count].bytes = bytes;
+	self->variables[self->variable_count].bytes = bytes * times;
 	self->variables[self->variable_count].class = declaration->class;
 	
 	self->variables[self->variable_count].offset = self->bytes;
-	self->bytes += bytes - (self->bytes - 1) % bytes + bytes - 1;
+	self->bytes += (bytes - (self->bytes - 1) % bytes + bytes - 1) * times;
 	
 	self->variables[self->variable_count].initial_value_ref_code = value_ref_code;
 	self->variables[self->variable_count++].initial_value_ref = value_ref;
@@ -189,7 +191,7 @@ void compile(node_t* self) {
 	self->ref = self->data;
 	
 	if (self->parent) self->class = self->parent->class;
-	else self->class = class_stack[class_stack_index];
+	else self->class = compiling_class ? class_stack[class_stack_index] : &main_class;
 	
 	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
@@ -417,18 +419,19 @@ void compile(node_t* self) {
 			self->class = self->children[self->child_count - 1]->class;
 		}
 		
-		if ((self->child_count > 1 && !class) || (self->child_count > 2 && class)) { // is also assignment?
-			compile(self->children[1]);
-			if (!class) self->class = self->children[1]->class;
+		if ((self->child_count > 2 && !class) || (self->child_count > 3 && class)) { // is also assignment?
+			compile(self->children[2]);
+			if (!class) self->class = self->children[2]->class;
 			
-			ref_code = self->children[1]->ref_code;
-			ref = self->children[1]->ref;
+			ref_code = self->children[2]->ref_code;
+			ref = self->children[2]->ref;
 		}
 		
-		uint8_t bytes = (uint8_t) (uint64_t) self->children[0];
+		uint8_t bytes = (uint8_t) (uint64_t) self->children[1];
+		uint64_t times = (uint64_t) self->children[0];
 		
 		if (compiling_class) {
-			class_add_variable(self, bytes, ref_code, ref);
+			class_add_variable(self, bytes, times, ref_code, ref);
 		} else {
 			create_reference(self, bytes);
 			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
@@ -537,55 +540,56 @@ void compile(node_t* self) {
 	else if (self->type == GRAMM_IDENTIFIER) {
 		uint8_t stop = 0;
 		
-		for (int64_t j = sizeof(class_stack) / sizeof(*class_stack) - 1; !stop && j >= 0; j--) {
-			class_t* current = class_stack[j];
+		for (int64_t i = ((class_t*) self->class)->variable_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
+			self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
+			sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
+			self->class = ((class_t*) self->class)->variables[i].class;
 			
-			if (current) for (uint64_t i = 0; i < current->class_count; i++) {
-				if (strcmp(self->data, current->classes[i].name) == 0) {
-					self->ref_code = "";
-					self->ref = (char*) malloc(16);
-					
-					self->is_raw_class_name = 1;
-					self->class = &current->classes[i];
-					sprintf(self->ref, "%ld", (uint64_t) current->bytes);
-					
-					stop = 1;
-					break;
-				}
-			}
-		} if (!stop && (class_stack_index == 1 || self->class == &main_class)) for (uint64_t i = 0; i < reference_count; i++) {
-			if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
-				self->class = references[i]->class;
-				self->ref_code = (char*) malloc(32);
-				sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i]->stack_pointer);
+			self->ref = "?ad";
+			stop = 1;
+			break;
+		} for (int64_t i = ((class_t*) self->class)->function_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
+			self->ref_code = (char*) malloc(32);
+			sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
+			
+			self->ref = "?ad";
+			stop = 1;
+			break;
+		}
+		
+		class_t* current = class_stack[class_stack_index];
+		uint8_t first_loop = 1;
+		
+		while (!stop) {
+			for (int64_t i = current->class_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, current->classes[i].name) == 0) {
+				self->ref_code = "";
+				self->ref = (char*) malloc(16);
 				
-				self->ref = "?ad";
+				self->is_raw_class_name = 1;
+				self->class = &current->classes[i];
+				sprintf(self->ref, "%ld", (uint64_t) current->classes[i].bytes);
+				
 				stop = 1;
 				break;
 			}
-		} /*else*/ if (!stop) {
-			for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) {
-				if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
-					self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
-					sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
-					self->class = ((class_t*) self->class)->variables[i].class;
-					
-					self->ref = "?ad";
-					stop = 1;
-					break;
-				}
-			} if (!stop) {
-				for (uint64_t i = 0; i < ((class_t*) self->class)->function_count; i++) {
-					if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
-						self->ref_code = (char*) malloc(32);
-						sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
-						
-						self->ref = "?ad";
-						stop = 1;
-						break;
-					}
-				}
+			
+			if (first_loop) {
+				first_loop = 0;
+				current = (class_t*) self->class;
+			} else {
+				if (current->parent) current = current->parent;
+				else break;
 			}
+		}
+		
+		for (int64_t i = reference_count - 1; !stop && i >= 0; i--) if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
+			self->class = references[i]->class;
+			self->ref_code = (char*) malloc(32);
+			sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i]->stack_pointer);
+			
+			self->ref = "?ad";
+			stop = 1;
+			break;
 		}
 	} else if (self->type == GRAMM_STRING) {
 		self->ref = (char*) malloc(32);

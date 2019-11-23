@@ -1,6 +1,7 @@
 
 %{
 	#include "compiler.h"
+	static uint64_t next_list_times;
 %}
 
 %code requires {}
@@ -59,8 +60,10 @@ program:list_statement {
 };
 
 data_type
-	: VAR  { $$ = (node_t*) 8; }
-	| BYTE { $$ = (node_t*) 1; }
+	: VAR  { next_list_times = 1; $$ = (node_t*) 8; }
+	| BYTE { next_list_times = 1; $$ = (node_t*) 1; }
+	| VAR  '[' NUMBER ']' { next_list_times = atoi($3.data); $$ = (node_t*) 8; }
+	| BYTE '[' NUMBER ']' { next_list_times = atoi($3.data); $$ = (node_t*) 1; }
 	;
 
 statement
@@ -70,11 +73,11 @@ statement
 	| '{' '}' { $$ = new_node(GRAMM_LIST_STATEMENT, 0, "", 0); }
 	| '{' list_statement '}' { $$ = $2; }
 	
-	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 1, $1); }
-	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, $1, $4); }
+	| data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 2, (node_t*) next_list_times, $1); }
+	| data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 0, $2.data, 3, (node_t*) next_list_times, $1, $4); }
 	
-	| expression CAST data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 1, $4.data, 2, $3, $1); }
-	| expression CAST data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 1, $4.data, 3, $3, $6, $1); }
+	| expression CAST data_type IDENTIFIER ';' { $$ = new_node(GRAMM_VAR_DECL, 1, $4.data, 3, (node_t*) next_list_times, $3, $1); }
+	| expression CAST data_type IDENTIFIER '=' expression ';' { $$ = new_node(GRAMM_VAR_DECL, 1, $4.data, 4, (node_t*) next_list_times, $3, $6, $1); }
 	
 	| CLASS IDENTIFIER '{' list_statement '}' { $$ = new_node(GRAMM_CLASS, 0, $2.data, 1, $4); }
 	
