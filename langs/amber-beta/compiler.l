@@ -22,7 +22,7 @@ W [ \t\v\n\f]
 	char string_buffer[1024];
 	char* string;
 	char import_prefix[1024] = {0};
-	char import_string;
+	char import_data;
 	
 	char* already_imported[4096];
 	int already_imported_count = 0;
@@ -52,8 +52,8 @@ W [ \t\v\n\f]
 }
 <LEX_STRING>. { *string++ = *yytext; }
 
-"import" { BEGIN LEX_IMPORT; import_string = 0; } // import
-"import_string" { BEGIN LEX_IMPORT; import_string = 1; };
+"import" { BEGIN LEX_IMPORT; import_data = 0; } // import
+"import_data" { BEGIN LEX_IMPORT; import_data = 1; };
 <LEX_IMPORT>[ \t]*
 <LEX_IMPORT>[^ \t\n);]+ {
 	BEGIN 0;
@@ -74,7 +74,7 @@ W [ \t\v\n\f]
 		already_imported[already_imported_count++] = path;
 		
 		if (!(yyin = fopen(path, "r"))) printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
-		else if (!import_string) yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
+		else if (!import_data) yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
 		
 		else {
 			fseek(yyin, 0, SEEK_END);
