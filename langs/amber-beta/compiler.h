@@ -11,6 +11,7 @@ extern FILE* yyin;
 extern FILE* yyout;
 
 extern int yylineno;
+extern char* current_file;
 
 void yyerror(const char* message) {
 	fflush(stdout);
@@ -127,13 +128,16 @@ typedef struct class_s {
 	uint64_t bytes;
 	
 	struct class_s* parent;
-	struct class_s* classes;
+	//~ struct class_s* classes;
+	struct class_s* classes[512];
 	uint64_t class_count;
 	
-	node_t** functions;
+	//~ node_t** functions;
+	node_t* functions[512];
 	uint64_t function_count;
 	
-	class_variable_t* variables;
+	//~ class_variable_t* variables;
+	class_variable_t variables[512];
 	uint64_t variable_count;
 } class_t;
 
@@ -147,10 +151,11 @@ void create_class(const char* name) {
 	compiling_class = 1;
 	class_t* parent = class_stack[class_stack_index];
 	
-	if (parent->class_count) parent->classes = (class_t*) realloc(parent->classes, (parent->class_count + 1) * sizeof(class_t));
-	else parent->classes = (class_t*) malloc(sizeof(class_t));
+	//~ if (parent->class_count) parent->classes = (class_t*) realloc(parent->classes, (parent->class_count + 1) * sizeof(class_t));
+	//~ else parent->classes = (class_t*) malloc(sizeof(class_t));
 	
-	class_t* self = &parent->classes[parent->class_count++];
+	parent->classes[parent->class_count] = (class_t*) malloc(sizeof(class_t));
+	class_t* self = parent->classes[parent->class_count++];
 	memset(self, 0, sizeof(*self));
 	self->parent = parent;
 	
@@ -161,15 +166,15 @@ void create_class(const char* name) {
 } void class_add_function(node_t* function) {
 	class_t* self = class_stack[class_stack_index];
 	
-	if (self->function_count) self->functions = (node_t**) realloc(self->functions, (self->function_count + 1) * sizeof(node_t*));
-	else self->functions = (node_t**) malloc(sizeof(node_t*));
+	//~ if (self->function_count) self->functions = (node_t**) realloc(self->functions, (self->function_count + 1) * sizeof(node_t*));
+	//~ else self->functions = (node_t**) malloc(sizeof(node_t*));
 	
 	self->functions[self->function_count++] = function;
 } void class_add_variable(node_t* declaration, uint8_t bytes, uint64_t times, const char* value_ref_code, const char* value_ref) {
 	class_t* self = class_stack[class_stack_index];
 	
-	if (self->variable_count) self->variables = (class_variable_t*) realloc(self->variables, (self->variable_count + 1) * sizeof(class_variable_t));
-	else self->variables = (class_variable_t*) malloc(sizeof(class_variable_t));
+	//~ if (self->variable_count) self->variables = (class_variable_t*) realloc(self->variables, (self->variable_count + 1) * sizeof(class_variable_t));
+	//~ else self->variables = (class_variable_t*) malloc(sizeof(class_variable_t));
 	
 	self->variables[self->variable_count].name = declaration->data;
 	self->variables[self->variable_count].bytes = bytes * times;
@@ -469,7 +474,12 @@ void compile(node_t* self) {
 			}
 		}
 		
-		node_t* imaginary_self_node = new_node(GRAMM_VAR_DECL, 0, "self", 0);
+		node_t* imaginary_self_node = (node_t*) malloc(sizeof(node_t));
+		memset(imaginary_self_node, 0, sizeof(node_t));
+		
+		imaginary_self_node->type = GRAMM_VAR_DECL;
+		imaginary_self_node->data = "self";
+		
 		imaginary_self_node->class = class_stack[class_stack_index];
 		create_reference(imaginary_self_node, 8);
 		fprintf(yyout, "cad bp sub %ld\tmov ?ad g3\n", imaginary_self_node->stack_pointer);
@@ -532,7 +542,7 @@ void compile(node_t* self) {
 		fprintf(yyout, "jmp $amber_loop_%ld\t:$amber_loop_%ld_end:\n", current, current);
 	} else if (self->type == GRAMM_CONTROL) {
 		if (strcmp(self->data, "break") == 0) fprintf(yyout, "jmp $amber_loop_%ld_end\n", loop_count - 1);
-		else if (strcmp(self->data, "cont") == 0) fprintf(yyout, "jmp $amber_loop_%ld_condition\n", loop_count - 1);
+		else if (strcmp(self->data, "continue") == 0) fprintf(yyout, "jmp $amber_loop_%ld_condition\n", loop_count - 1);
 	}
 	
 	// literals
@@ -561,13 +571,13 @@ void compile(node_t* self) {
 		uint8_t first_loop = 1;
 		
 		while (!stop) {
-			for (int64_t i = current->class_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, current->classes[i].name) == 0) {
+			for (int64_t i = current->class_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, current->classes[i]->name) == 0) {
 				self->ref_code = "";
 				self->ref = (char*) malloc(16);
 				
 				self->is_raw_class_name = 1;
-				self->class = &current->classes[i];
-				sprintf(self->ref, "%ld", (uint64_t) current->classes[i].bytes);
+				self->class = current->classes[i];
+				sprintf(self->ref, "%ld", (uint64_t) current->classes[i]->bytes);
 				
 				stop = 1;
 				break;
@@ -610,6 +620,8 @@ int main(int argc, char* argv[]) {
 		uint64_t last_slash = 0;
 		for (uint64_t i = 0; i < strlen(argv[1]); i++) if (argv[1][i] == '/') last_slash = i;
 		memcpy(import_prefix, argv[1], last_slash + 1);
+		
+		current_file = argv[1];
 		
 		FILE* file = fopen(argv[1], "r");
 		if (!file) {

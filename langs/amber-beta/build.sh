@@ -35,11 +35,17 @@ cp -rf lib src
 flex compiler.l
 yacc compiler.y -d
 
-gcc -O -c lex.yy.c -o lex.yy.o
-gcc -O -c y.tab.c  -o y.tab.o
+gcc -O3 -c lex.yy.c -o lex.yy.o
+gcc -O3 -c y.tab.c  -o y.tab.o
+
+#~ gcc -O0 -c lex.yy.c -o lex.yy.o -g
+#~ gcc -O0 -c y.tab.c  -o y.tab.o -g
 
 gcc lex.yy.o y.tab.o -lfl -lm
 ./a.out src/main.a main.asm
+#~ gcc lex.yy.o y.tab.o -lfl -lm -g
+#~ gdb --args a.out src/main.a main.asm
+
 rm -f a.out lex.yy.c y.tab.c lex.yy.o y.tab.o y.tab.h
 
 mv main.asm ../../code/main.asm

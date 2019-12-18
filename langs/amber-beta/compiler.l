@@ -24,8 +24,13 @@ W [ \t\v\n\f]
 	char import_prefix[1024] = {0};
 	char import_data;
 	
+	char* current_file; /// UNUSED
+	
 	char* already_imported[4096];
 	int already_imported_count = 0;
+	
+	int import_lineno[4096];
+	int import_lineno_index = 0;
 	
 	int yywrap(void);
 	static void comment(void);
@@ -73,10 +78,15 @@ W [ \t\v\n\f]
 	if (import) {
 		already_imported[already_imported_count++] = path;
 		
-		if (!(yyin = fopen(path, "r"))) printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
-		else if (!import_data) yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
-		
-		else {
+		if (!(yyin = fopen(path, "r"))) {
+			printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
+			
+		} else if (!import_data) {
+			import_lineno[import_lineno_index++] = yylineno;
+			yylineno = 1;
+			yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
+			
+		} else {
 			fseek(yyin, 0, SEEK_END);
 			yylval.data.bytes = ftell(yyin);
 			rewind(yyin);
@@ -90,6 +100,7 @@ W [ \t\v\n\f]
 }
 <<EOF>> {
 	yypop_buffer_state();
+	yylineno = import_lineno[--import_lineno_index];
 	if (!YY_CURRENT_BUFFER) yyterminate();
 }
 
