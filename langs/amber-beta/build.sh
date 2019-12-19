@@ -41,7 +41,7 @@ gcc -O3 -c y.tab.c  -o y.tab.o
 #~ gcc -O0 -c lex.yy.c -o lex.yy.o -g
 #~ gcc -O0 -c y.tab.c  -o y.tab.o -g
 
-gcc lex.yy.o y.tab.o -lfl -lm
+gcc lex.yy.o y.tab.o -lm
 ./a.out src/main.a main.asm
 #~ gcc lex.yy.o y.tab.o -lfl -lm -g
 #~ gdb --args a.out src/main.a main.asm
