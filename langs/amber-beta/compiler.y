@@ -11,7 +11,7 @@
 	struct node_s* abstract_syntax_tree;
 }
 
-%token CLASS FUNC IF WHILE LOOP
+%token CLASS FUNC IF WHILE LOOP RETURN
 %nonassoc IF_PREC
 %nonassoc ELSE
 
@@ -90,6 +90,9 @@ statement
 	| WHILE '(' expression ')' statement { $$ = new_node(GRAMM_WHILE, 0, "", 2, $5, $3); }
 	| LOOP statement { $$ = new_node(GRAMM_WHILE, 0, "", 1, $2); }
 	| CONTROL { $$ = new_node(GRAMM_CONTROL, 0, $1.data, 0); }
+	
+	| RETURN expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), $2); }
+	| RETURN ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), new_node(GRAMM_NUMBER, 0, "0", 0)); }
 	
 	| expression list_expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	;

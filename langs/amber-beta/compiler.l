@@ -113,6 +113,7 @@ W [ \t\v\n\f]
 "func"   return FUNC;
 "class"  return CLASS;
 "loop"   return LOOP;
+"return" return RETURN;
 
 "break"    { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
 "continue" { yylval.data.data = strdup(yytext); return CONTROL; }
