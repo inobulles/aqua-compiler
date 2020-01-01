@@ -1,7 +1,7 @@
 
 #!/bin/sh
 set -e
-echo "Compiling with Amber 1.1.0 (beta) ..."
+echo "Compiling with Amber 1.2.0 (beta) ..."
 
 update=""
 git_prefix="https://github.com"

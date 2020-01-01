@@ -19,28 +19,17 @@ W [ \t\v\n\f]
 	
 	#include "y.tab.h"
 	
-	char string_buffer[1024];
+	char string_buffer[100];
 	char* string;
-	char import_prefix[1024] = {0};
-	char import_data;
-	
-	char* current_file; /// UNUSED
-	
-	char* already_imported[4096];
-	int already_imported_count = 0;
-	
-	int import_lineno[4096];
-	int import_lineno_index = 0;
 	
 	int yywrap(void);
 	static void comment(void);
 %}
 
 %x LEX_STRING
-%x LEX_IMPORT
 
 %%
-\" { BEGIN LEX_STRING; string = string_buffer; } // string
+\" { BEGIN LEX_STRING; string = string_buffer; }
 <LEX_STRING>\\n { *string++ = '\n'; }
 <LEX_STRING>\\t { *string++ = '\t'; }
 <LEX_STRING>\\b { *string++ = '\b'; }
@@ -57,63 +46,14 @@ W [ \t\v\n\f]
 }
 <LEX_STRING>. { *string++ = *yytext; }
 
-"import" { BEGIN LEX_IMPORT; import_data = 0; } // import
-"import_data" { BEGIN LEX_IMPORT; import_data = 1; };
-<LEX_IMPORT>[ \t]*
-<LEX_IMPORT>[^ \t\n);]+ {
-	BEGIN 0;
-	
-	char path[1024] = {0};
-	strcpy(path, import_prefix);
-	strcpy(path + strlen(path), yytext);
-	
-	uint8_t import = 1;
-	for (int i = 0; i < already_imported_count; i++) {
-		if (strcmp(path, already_imported[i])) {
-			import = 0;
-			break;
-		}
-	}
-	
-	if (import) {
-		already_imported[already_imported_count++] = path;
-		
-		if (!(yyin = fopen(path, "r"))) {
-			printf("WARNING File %s could not be imported (line %d)\n", path, yylineno);
-			
-		} else if (!import_data) {
-			import_lineno[import_lineno_index++] = yylineno;
-			yylineno = 1;
-			yypush_buffer_state(yy_create_buffer(yyin, YY_BUF_SIZE));
-			
-		} else {
-			fseek(yyin, 0, SEEK_END);
-			yylval.data.bytes = ftell(yyin);
-			rewind(yyin);
-			
-			yylval.data.data = malloc(yylval.data.bytes);
-			int x = fread(yylval.data.data, 1, yylval.data.bytes, yyin);
-			
-			return STRING;
-		}
-	}
-}
-<<EOF>> {
-	yypop_buffer_state();
-	yylineno = import_lineno[--import_lineno_index];
-	if (!YY_CURRENT_BUFFER) yyterminate();
-}
-
 "/*" comment(); // comments
 "//".*
 
-"if"     return IF; // statement keywords
-"else"   return ELSE;
-"while"  return WHILE;
-"func"   return FUNC;
-"class"  return CLASS;
-"loop"   return LOOP;
-"return" return RETURN;
+"if"    return IF; // statement keywords
+"else"  return ELSE;
+"while" return WHILE;
+"func"  return FUNC;
+"loop"  return LOOP;
 
 "break"    { yylval.data.data = strdup(yytext); return CONTROL; } // control statement keywords
 "continue" { yylval.data.data = strdup(yytext); return CONTROL; }
@@ -122,7 +62,7 @@ W [ \t\v\n\f]
 "byte" return BYTE;
 
 "freeze" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
-"global" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
+"manual" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 
 "++" return STR_CAT; // string operators
 "%%" return STR_FORMAT;
@@ -159,9 +99,6 @@ W [ \t\v\n\f]
 
 ";" return ';'; // delimiters
 "," return ',';
-
-"." return '.'; // class stuff
-"->" return CAST;
 
 "{" return '{'; // brackets
 "}" return '}';
