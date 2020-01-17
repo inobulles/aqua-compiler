@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define FIXED_PRECISION 1000000
+
 extern int yylex(void);
 extern int yyparse(void);
 
@@ -29,7 +31,7 @@ enum grammar_e {
 	GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, GRAMM_ACCESS, // arithmetic expressions
 	GRAMM_VAR_DECL, GRAMM_FUNC, GRAMM_CLASS, // declaration statements
 	GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
-	GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_STRING, // literals
+	GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_FIXED, GRAMM_STRING, // literals
 };
 
 typedef struct node_s {
@@ -69,7 +71,7 @@ node_t* new_node(uint8_t type, uint64_t data_bytes, char* data, int child_count,
 	va_list args;
 	va_start(args, child_count);
 	
-	for (int i = 0; i < self->child_count; i++) {
+	for (uint32_t i = 0; i < self->child_count; i++) {
 		self->children[i] = va_arg(args, node_t*);
 	}
 	
@@ -217,6 +219,7 @@ void compile(node_t* self) {
 		
 		self->ref = self->children[1]->ref;
 		self->ref_code = self->children[1]->ref_code;
+		
 	} else if (self->type == GRAMM_CAST) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -224,6 +227,7 @@ void compile(node_t* self) {
 		self->class = self->children[0]->class;
 		self->ref = self->children[1]->ref;
 		self->ref_code = self->children[1]->ref_code;
+		
 	} else if (self->type == GRAMM_OPERATION) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -244,6 +248,7 @@ void compile(node_t* self) {
 		else if (*self->data == '%') instruction = "div";
 		
 		fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s %s\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref, *self->data == '%' ? "a3" : "g0");
+		
 	} else if (self->type == GRAMM_STR_OPERATION) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -270,6 +275,7 @@ void compile(node_t* self) {
 				"mov g0 a0\tsub g0 g3\n"
 				"%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		}
+		
 	} else if (self->type == GRAMM_LOGIC) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -282,6 +288,7 @@ void compile(node_t* self) {
 		else if (*self->data == '|') instruction = "or";
 		
 		fprintf(yyout, /* normalize left */ "mov g0 0\t%scnd %s\tmov g0 1\t" /* normalize right */ "mov g1 0\t%scnd %s\tmov g1 1\t" /* operation */ "%s g0 g1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, instruction, self->ref_code, self->ref);
+		
 	} else if (self->type == GRAMM_COMPARE) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -295,6 +302,7 @@ void compile(node_t* self) {
 		else if (*self->data == ']') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcmp sf of\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		else if (*self->data == '[') fprintf(yyout, "mov g0 0\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 1\tcmp sf of\txor zf 1\tcnd zf\tmov g0 1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		else if (*self->data == '>') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 0\tcmp sf of\txor zf 1\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+		
 	} else if (self->type == GRAMM_STR_COMPARE) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -309,6 +317,7 @@ void compile(node_t* self) {
 			"cmp 1?g2 0\tcnd zf\tjmp $amber_internal_seq_loop_inline_%ld_end\n"
 			"add g1 1\tadd g2 1\tjmp $amber_internal_seq_loop_inline_%ld\n"
 			":$amber_internal_seq_loop_inline_%ld_end:\t%smov %s g0\n", *self->data == '=', self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, current, *self->data != '=', current, current, current, current, current, self->ref_code, self->ref);
+		
 	} else if (self->type == GRAMM_ASSIGN) {
 		compile(self->children[0]);
 		compile(self->children[1]);
@@ -318,12 +327,14 @@ void compile(node_t* self) {
 		if (*self->data == '=') fprintf(yyout, "%smov g0 %s\t%smov %s g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (*self->data == '*') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 1?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		else if (*self->data == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
+		
 	} else if (self->type == GRAMM_UNARY) {
 		compile(self->children[0]);
 		generate_stack_entry(self);
 		
 		if (*self->data == '&') {
 			fprintf(yyout, "%smov g0 ad\t%smov %s g0\n", self->children[0]->ref_code, self->ref_code, self->ref);
+			
 		} else {
 			char* code = "nop g0";
 			
@@ -336,19 +347,23 @@ void compile(node_t* self) {
 			
 			fprintf(yyout, "%smov g0 %s\t%s\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, code, self->ref_code, self->ref);
 		}
+		
 	} else if (self->type == GRAMM_CALL) {
 		if (strcmp(self->children[0]->data, "return") == 0) { // return
 			compile(self->children[1]);
 			fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
+			
 		} else {
 			if (strcmp(self->children[0]->data, "classof") == 0) { // classof
 				compile(self->children[1]);
 				fprintf(yyout, "%%$amber_class_name_%ld \"%s<%p>\" 0%%\tmov g0 $amber_class_name_%ld\t", data_section_count, ((class_t*) self->children[1]->class)->name, self->children[1]->class, data_section_count);
 				data_section_count++;
+				
 			} else if (strcmp(self->children[0]->data, "new") == 0) { // new
 				compile(self->children[1]);
 				fprintf(yyout, "%smov a0 %s\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tmov g0 a0\t", self->children[1]->ref_code, self->children[1]->ref);
 				self->class = self->children[1]->class;
+				
 			} else {
 				compile(self->children[0]);
 				
@@ -395,6 +410,7 @@ void compile(node_t* self) {
 						"%smov g1 a0\tmov a0 16\tcal malloc\tadd g0 a0\tmov 1?g0 0\tsub g0 1\n"
 						":$amber_internal_itos_loop_inline_%ld:\tsub g0 1\tdiv g1 %s\tadd a3 48\tmov 1?g0 a3\n"
 						"cnd g1\tjmp $amber_internal_itos_loop_inline_%ld\n", argument > 1 ? "mov g3 a1\t" : "", current, argument > 1 ? "g3" : "10", current);
+					
 				} else {
 					uint8_t statically_called = 1;
 					if (self->children[0]->child_count && !self->children[0]->children[1]->parent->is_raw_class_name) {
@@ -437,10 +453,12 @@ void compile(node_t* self) {
 		
 		if (compiling_class) {
 			class_add_variable(self, bytes, times, ref_code, ref);
+			
 		} else {
 			create_reference(self, bytes);
 			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
 		}
+		
 	} else if (self->type == GRAMM_FUNC) {
 		uint8_t local = 1; /// TODO global attribute
 		uint64_t current_func_id;
@@ -449,6 +467,7 @@ void compile(node_t* self) {
 		if (local) {
 			current_func_id = function_count++;
 			fprintf(yyout, "jmp $amber_func_%ld$end\t:$amber_func_%ld:\n", current_func_id, current_func_id);
+			
 		} else {
 			fprintf(yyout, "jmp %s$end\t:%s:\n", self->data, self->data);
 		}
@@ -493,6 +512,7 @@ void compile(node_t* self) {
 		if (local) {
 			fprintf(yyout, "mov g0 0\tret\t:$amber_func_%ld$end:\n", current_func_id);
 			fprintf(yyout, "cad bp sub %ld\tmov ?ad $amber_func_%ld\n", self->stack_pointer, current_func_id);
+			
 		} else {
 			fprintf(yyout, "mov g0 0\tret\t:%s$end:\n", self->data);
 			fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", self->stack_pointer, self->data);
@@ -501,6 +521,7 @@ void compile(node_t* self) {
 		if (compiling_class) {
 			class_add_function(function_reference);
 		}
+		
 	} else if (self->type == GRAMM_CLASS) {
 		uint8_t prev_compiling_class = compiling_class;
 		create_class(self->data);
@@ -524,9 +545,11 @@ void compile(node_t* self) {
 			fprintf(yyout, "jmp $amber_inline_%ld_end\t:$amber_inline_%ld_condition:\t%scnd %s\tjmp $amber_inline_%ld\n", current, current, self->children[0]->ref_code, self->children[0]->ref, current);
 			compile(self->children[2]); // compile statement (after else)
 			fprintf(yyout, ":$amber_inline_%ld_end:\n", current);
+			
 		} else {
 			fprintf(yyout, "jmp $amber_inline_%ld_end\t:$amber_inline_%ld_condition:\t%scnd %s\tjmp $amber_inline_%ld\t:$amber_inline_%ld_end:\n", current, current, self->children[0]->ref_code, self->children[0]->ref, current, current);
 		}
+		
 	} else if (self->type == GRAMM_WHILE) {
 		uint64_t current = loop_count++;
 		fprintf(yyout, "jmp $amber_loop_%ld_condition\t:$amber_loop_%ld:\n", current, current);
@@ -540,6 +563,7 @@ void compile(node_t* self) {
 		}
 		
 		fprintf(yyout, "jmp $amber_loop_%ld\t:$amber_loop_%ld_end:\n", current, current);
+		
 	} else if (self->type == GRAMM_CONTROL) {
 		if (strcmp(self->data, "break") == 0) fprintf(yyout, "jmp $amber_loop_%ld_end\n", loop_count - 1);
 		else if (strcmp(self->data, "continue") == 0) fprintf(yyout, "jmp $amber_loop_%ld_condition\n", loop_count - 1);
@@ -558,6 +582,7 @@ void compile(node_t* self) {
 			self->ref = "?ad";
 			stop = 1;
 			break;
+			
 		} for (int64_t i = ((class_t*) self->class)->function_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
 			self->ref_code = (char*) malloc(32);
 			sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
@@ -586,6 +611,7 @@ void compile(node_t* self) {
 			if (first_loop) {
 				first_loop = 0;
 				current = (class_t*) self->class;
+				
 			} else {
 				if (current->parent) current = current->parent;
 				else break;
@@ -601,6 +627,7 @@ void compile(node_t* self) {
 			stop = 1;
 			break;
 		}
+		
 	} else if (self->type == GRAMM_STRING) {
 		self->ref = (char*) malloc(32);
 		sprintf(self->ref, "$amber_data_%ld", data_section_count++);
@@ -608,6 +635,24 @@ void compile(node_t* self) {
 		fprintf(yyout, "%%%s ", self->ref);
 		for (uint64_t i = 0; i < self->data_bytes; i++) fprintf(yyout, "x%x ", self->data[i]);
 		fprintf(yyout, "0%%\n");
+		
+	} else if (self->type == GRAMM_FIXED) {
+		uint64_t decimal_part = 0;
+		const char* decimal_part_string = (const char*) self->children[1];
+		int decimal_part_bytes = strlen(decimal_part_string);
+		
+		int exponent = 1;
+		for (int i = decimal_part_bytes - 1; i >= 0; i--) {
+			decimal_part += (decimal_part_string[i] - '0') * exponent;
+			exponent *= 10;
+		}
+		
+		for (int i = 0; i < 6 - decimal_part_bytes; i++) {
+			decimal_part *= 10;
+		}
+		
+		self->ref = (char*) malloc(32);
+		sprintf(self->ref, "%lld", atoll((const char*) self->children[0]) * FIXED_PRECISION + decimal_part);
 	}
 	
 	decrement_depth();

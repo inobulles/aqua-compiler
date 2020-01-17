@@ -153,6 +153,7 @@ expression
 	
 	| IDENTIFIER { $$ = new_node(GRAMM_IDENTIFIER, 0, $1.data, 0); }
 	| NUMBER { $$ = new_node(GRAMM_NUMBER, 0, $1.data, 0); }
+	| NUMBER '.' NUMBER { $$ = new_node(GRAMM_FIXED, 0, "", 2, $1.data, $3.data); }
 	| STRING { $$ = new_node(GRAMM_STRING, $1.bytes, $1.data, 0); }
 	;
 
