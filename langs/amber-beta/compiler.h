@@ -36,6 +36,16 @@ enum grammar_e {
 	GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_FIXED, GRAMM_STRING, // literals
 };
 
+enum attribute_heat_e { ATTRIBUTE_HEAT_DEFAULT = 0, ATTRIBUTE_HEAT_FROZEN, ATTRIBUTE_HEAT_COLD, ATTRIBUTE_HEAT_WARM, ATTRIBUTE_HEAT_HOT };
+enum attribute_number_e { ATTRIBUTE_NUMBER_DEFAULT = 0, ATTRIBUTE_NUMBER_FIXED, ATTRIBUTE_NUMBER_WHOLE };
+
+typedef struct { // NOTE default state should always be 0 for each attribute
+	uint8_t heat;
+	uint8_t number;
+} attribute_state_t;
+
+static attribute_state_t attribute_state = {0};
+
 typedef struct node_s {
 	uint8_t child_count;
 	struct node_s* children[16];
@@ -46,7 +56,7 @@ typedef struct node_s {
 	uint8_t type;
 	int line;
 	
-	uint8_t is_fixed;
+	attribute_state_t attribute_state;
 	uint8_t is_raw_class_name;
 	
 	char* ref_code;
@@ -102,6 +112,7 @@ uint64_t generate_stack_entry(node_t* self) {
 	sprintf(self->ref_code, "cad bp sub %ld\t", stack_pointer += 8 - (stack_pointer - 1) % 8 + 8 - 1);
 	self->ref = "?ad";
 	return stack_pointer;
+	
 } node_t* create_reference(node_t* self, uint8_t width) {
 	self->width = width;
 	self->scope_depth = depth;
@@ -111,6 +122,7 @@ uint64_t generate_stack_entry(node_t* self) {
 	else references = (node_t**) malloc((reference_count + 1) * sizeof(node_t*));
 	
 	return references[reference_count++] = self;
+	
 } void decrement_depth(void) {
 	for (uint64_t i = 0; i < reference_count; i++) if (references[i]->scope_depth > depth) references[i]->scope_depth = -1;
 	depth--;
@@ -122,6 +134,8 @@ typedef struct {
 	const char* name;
 	uint64_t bytes;
 	uint64_t offset;
+	
+	attribute_state_t attribute_state;
 	void* class;
 	
 	const char* initial_value_ref_code;
@@ -169,6 +183,7 @@ void create_class(const char* name) {
 	self->depth = depth;
 	
 	class_stack[++class_stack_index] = self;
+	
 } void class_add_function(node_t* function) {
 	class_t* self = class_stack[class_stack_index];
 	
@@ -176,6 +191,7 @@ void create_class(const char* name) {
 	//~ else self->functions = (node_t**) malloc(sizeof(node_t*));
 	
 	self->functions[self->function_count++] = function;
+	
 } void class_add_variable(node_t* declaration, uint8_t bytes, uint64_t times, const char* value_ref_code, const char* value_ref) {
 	class_t* self = class_stack[class_stack_index];
 	
@@ -186,11 +202,14 @@ void create_class(const char* name) {
 	self->variables[self->variable_count].bytes = bytes * times;
 	self->variables[self->variable_count].class = declaration->class;
 	
+	memcpy(&self->variables[self->variable_count].attribute_state, &declaration->attribute_state, sizeof(declaration->attribute_state));
+	
 	self->variables[self->variable_count].offset = self->bytes;
 	self->bytes += (bytes - (self->bytes - 1) % bytes + bytes - 1) * times;
 	
 	self->variables[self->variable_count].initial_value_ref_code = value_ref_code;
 	self->variables[self->variable_count++].initial_value_ref = value_ref;
+	
 } void exit_class(void) {
 	class_stack_index--;
 }
@@ -204,7 +223,7 @@ void compile(node_t* self) {
 	// inherit stuff from parent
 	
 	if (self->parent) {
-		/*if (!self->is_fixed)*/ self->is_fixed = self->parent->is_fixed;
+		memcpy(&self->attribute_state, &self->parent->attribute_state, sizeof(self->attribute_state));
 		self->class = self->parent->class;
 		
 	} else {
@@ -244,10 +263,10 @@ void compile(node_t* self) {
 		compile(self->children[1]);
 		
 		generate_stack_entry(self);
-		self->is_fixed = self->children[0]->is_fixed || self->children[1]->is_fixed;
+		self->attribute_state.number = (self->children[0]->attribute_state.number == ATTRIBUTE_NUMBER_FIXED || self->children[1]->attribute_state.number == ATTRIBUTE_NUMBER_FIXED) ? ATTRIBUTE_NUMBER_FIXED : ATTRIBUTE_NUMBER_WHOLE;
 		
 		uint8_t normal_operation = 1;
-		if (self->children[0]->is_fixed && self->children[1]->is_fixed) {
+		if (self->children[0]->attribute_state.number == ATTRIBUTE_NUMBER_FIXED && self->children[1]->attribute_state.number == ATTRIBUTE_NUMBER_FIXED) {
 			if (*self->data == '*') {
 				normal_operation = 0;
 				fprintf(yyout, "%smov g0 %s\tdiv g0 "PRECISION_ROOT"\t%smov g1 %s\tdiv g1 "PRECISION_ROOT"\tmul g0 g1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
@@ -470,7 +489,7 @@ void compile(node_t* self) {
 			compile(self->children[2]);
 			
 			if (!class) self->class = self->children[2]->class; // if class not specified, inherit from the expression's class
-			self->is_fixed = self->children[2]->is_fixed;
+			memcpy(&self->attribute_state, &self->children[2]->attribute_state, sizeof(attribute_state));
 			
 			ref_code = self->children[2]->ref_code;
 			ref = self->children[2]->ref;
@@ -561,7 +580,14 @@ void compile(node_t* self) {
 	
 	// statements
 	
-	else if (self->type == GRAMM_IF) {
+	else if (self->type == GRAMM_ATTRIBUTE) {
+		if (strcmp(self->data, "frozen") == 0) attribute_state.heat = ATTRIBUTE_HEAT_FROZEN;
+		else if (strcmp(self->data, "warm") == 0) attribute_state.heat = ATTRIBUTE_HEAT_WARM;
+		
+		else if (strcmp(self->data, "fixed") == 0) attribute_state.number = ATTRIBUTE_NUMBER_FIXED;
+		else if (strcmp(self->data, "whole") == 0) attribute_state.number = ATTRIBUTE_NUMBER_WHOLE;
+		
+	} else if (self->type == GRAMM_IF) {
 		compile(self->children[0]); // compile expression
 		
 		uint64_t current = inline_count++;
@@ -605,7 +631,11 @@ void compile(node_t* self) {
 		for (int64_t i = ((class_t*) self->class)->variable_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
 			self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
 			sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
+			
+			// inherit from variable
+			
 			self->class = ((class_t*) self->class)->variables[i].class;
+			memcpy(&self->attribute_state, &((class_t*) self->class)->variables[i].attribute_state, sizeof(attribute_state));
 			
 			self->ref = "?ad";
 			stop = 1;
@@ -650,7 +680,7 @@ void compile(node_t* self) {
 			// inherit from reference
 			
 			self->class = references[i]->class;
-			self->is_fixed = references[i]->is_fixed;
+			memcpy(&self->attribute_state, &references[i]->attribute_state, sizeof(attribute_state));
 			
 			self->ref_code = (char*) malloc(32);
 			sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i]->stack_pointer);
@@ -683,9 +713,16 @@ void compile(node_t* self) {
 			decimal_part *= 10;
 		}
 		
-		self->is_fixed = 1;
+		self->attribute_state.number = ATTRIBUTE_NUMBER_FIXED;
 		self->ref = (char*) malloc(32);
 		sprintf(self->ref, "%lld", atoll((const char*) self->children[0]) * FIXED_PRECISION + decimal_part);
+	}
+	
+	if (self->type == GRAMM_VAR_DECL) {
+		for (int i = 0; i < sizeof(attribute_state); i++) {
+			if (((uint8_t*) &attribute_state)[i] != 0) ((uint8_t*) &self->attribute_state)[i] = ((uint8_t*) &attribute_state)[i];
+			((uint8_t*) &attribute_state)[i] = 0;
+		}
 	}
 	
 	decrement_depth();

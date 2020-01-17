@@ -47,7 +47,7 @@
 %left '.'
 %nonassoc ABS_PREC
 
-%type <abstract_syntax_tree> program data_type statement left_pointer1 left_pointer8 expression argument list_statement list_expression list_argument list_attribute
+%type <abstract_syntax_tree> program data_type statement left_pointer1 left_pointer8 expression argument list_statement list_expression list_argument
 
 %start program
 %%
@@ -94,6 +94,7 @@ statement
 	| RETURN expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), $2); }
 	| RETURN ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), new_node(GRAMM_NUMBER, 0, "0", 0)); }
 	
+	| ATTRIBUTE { $$ = new_node(GRAMM_ATTRIBUTE, 0, $1.data, 0); }
 	| expression list_expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
 	;
 
@@ -175,9 +176,4 @@ list_expression
 list_argument
 	: argument { $$ = $1; }
 	| argument ',' list_argument { $$ = new_node(GRAMM_LIST_ARGUMENT, 0, "", 2, $1, $3); }
-	;
-
-list_attribute
-	: ATTRIBUTE { $$ = new_node(GRAMM_ATTRIBUTE, 0, $1.data, 0); }
-	| ATTRIBUTE list_attribute { $$ = new_node(GRAMM_LIST_ATTRIBUTE, 0, $1.data, 1, $2); }
 	;
