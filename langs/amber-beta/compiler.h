@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define DECIMAL_PLACES 6
 #define FIXED_PRECISION 1000000
+#define PRECISION_ROOT "1000"
 
 extern int yylex(void);
 extern int yyparse(void);
@@ -44,7 +46,9 @@ typedef struct node_s {
 	uint8_t type;
 	int line;
 	
+	uint8_t is_fixed;
 	uint8_t is_raw_class_name;
+	
 	char* ref_code;
 	char* ref;
 	
@@ -233,21 +237,36 @@ void compile(node_t* self) {
 		compile(self->children[1]);
 		
 		generate_stack_entry(self);
-		char* instruction = "nop";
+		self->is_fixed = self->children[0]->is_fixed || self->children[1]->is_fixed;
 		
-		if      (*self->data == '|') instruction = "or";
-		else if (*self->data == '^') instruction = "xor";
-		else if (*self->data == '&') instruction = "and";
-		else if (*self->data == '<') instruction = "shl";
-		else if (*self->data == '>') instruction = "shr";
-		else if (*self->data == 'r') instruction = "ror";
-		else if (*self->data == '+') instruction = "add";
-		else if (*self->data == '-') instruction = "sub";
-		else if (*self->data == '*') instruction = "mul";
-		else if (*self->data == '/') instruction = "div";
-		else if (*self->data == '%') instruction = "div";
-		
-		fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s %s\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref, *self->data == '%' ? "a3" : "g0");
+		uint8_t normal_operation = 1;
+		if (self->children[0]->is_fixed && self->children[1]->is_fixed) {
+			if (*self->data == '*') {
+				normal_operation = 0;
+				fprintf(yyout, "%smov g0 %s\tdiv g0 "PRECISION_ROOT"\t%smov g1 %s\tdiv g1 "PRECISION_ROOT"\tmul g0 g1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+				
+			} else if (*self->data == '/') {
+				normal_operation = 0;
+				fprintf(yyout, "%smov g0 %s\tmul g0 "PRECISION_ROOT"\t%sdiv g0 %s\tmul g0 "PRECISION_ROOT"\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
+			}
+			
+		} if (normal_operation) {
+			char* instruction = "nop";
+			
+			if      (*self->data == '|') instruction = "or";
+			else if (*self->data == '^') instruction = "xor";
+			else if (*self->data == '&') instruction = "and";
+			else if (*self->data == '<') instruction = "shl";
+			else if (*self->data == '>') instruction = "shr";
+			else if (*self->data == 'r') instruction = "ror";
+			else if (*self->data == '+') instruction = "add";
+			else if (*self->data == '-') instruction = "sub";
+			else if (*self->data == '*') instruction = "mul";
+			else if (*self->data == '/') instruction = "div";
+			else if (*self->data == '%') instruction = "div";
+			
+			fprintf(yyout, "%smov g0 %s\t%s%s g0 %s\t%smov %s %s\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, instruction, self->children[1]->ref, self->ref_code, self->ref, *self->data == '%' ? "a3" : "g0");
+		}
 		
 	} else if (self->type == GRAMM_STR_OPERATION) {
 		compile(self->children[0]);
@@ -647,10 +666,11 @@ void compile(node_t* self) {
 			exponent *= 10;
 		}
 		
-		for (int i = 0; i < 6 - decimal_part_bytes; i++) {
+		for (int i = 0; i < DECIMAL_PLACES - decimal_part_bytes; i++) {
 			decimal_part *= 10;
 		}
 		
+		self->is_fixed = 1;
 		self->ref = (char*) malloc(32);
 		sprintf(self->ref, "%lld", atoll((const char*) self->children[0]) * FIXED_PRECISION + decimal_part);
 	}
