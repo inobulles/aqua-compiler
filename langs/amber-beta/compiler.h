@@ -201,8 +201,15 @@ void compile(node_t* self) {
 	depth++;
 	self->ref = self->data;
 	
-	if (self->parent) self->class = self->parent->class;
-	else self->class = compiling_class ? class_stack[class_stack_index] : &main_class;
+	// inherit stuff from parent
+	
+	if (self->parent) {
+		/*if (!self->is_fixed)*/ self->is_fixed = self->parent->is_fixed;
+		self->class = self->parent->class;
+		
+	} else {
+		self->class = compiling_class ? class_stack[class_stack_index] : &main_class;
+	}
 	
 	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
@@ -461,7 +468,9 @@ void compile(node_t* self) {
 		
 		if ((self->child_count > 2 && !class) || (self->child_count > 3 && class)) { // is also assignment?
 			compile(self->children[2]);
-			if (!class) self->class = self->children[2]->class;
+			
+			if (!class) self->class = self->children[2]->class; // if class not specified, inherit from the expression's class
+			self->is_fixed = self->children[2]->is_fixed;
 			
 			ref_code = self->children[2]->ref_code;
 			ref = self->children[2]->ref;
@@ -638,7 +647,11 @@ void compile(node_t* self) {
 		}
 		
 		for (int64_t i = reference_count - 1; !stop && i >= 0; i--) if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
+			// inherit from reference
+			
 			self->class = references[i]->class;
+			self->is_fixed = references[i]->is_fixed;
+			
 			self->ref_code = (char*) malloc(32);
 			sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = references[i]->stack_pointer);
 			
