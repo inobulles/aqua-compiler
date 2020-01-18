@@ -23,17 +23,17 @@ void yyerror(const char* message) {
 }
 
 enum grammar_e {
-	GRAMM_PROGRAM,
+	GRAMM_PROGRAM = 0,
 	
-	GRAMM_STATEMENT, GRAMM_EXPRESSION, GRAMM_ARGUMENT, GRAMM_ATTRIBUTE, // big syntax elements
-	GRAMM_LIST_IDENTIFIER, GRAMM_LIST_STATEMENT, GRAMM_LIST_EXPRESSION, GRAMM_LIST_ARGUMENT, GRAMM_LIST_ATTRIBUTE, // lists
+	GRAMM_STATEMENT = 1, GRAMM_EXPRESSION = 2, GRAMM_ARGUMENT = 3, GRAMM_ATTRIBUTE = 4, // big syntax elements
+	GRAMM_LIST_IDENTIFIER = 5, GRAMM_LIST_STATEMENT = 6, GRAMM_LIST_EXPRESSION = 7, GRAMM_LIST_ARGUMENT = 8, // lists
 	
-	GRAMM_CALL, // expressions
-	GRAMM_ASSIGN, GRAMM_CAST, // class stuff
-	GRAMM_COMPARE, GRAMM_STR_COMPARE, GRAMM_LOGIC, GRAMM_OPERATION, GRAMM_STR_OPERATION, GRAMM_UNARY, GRAMM_ACCESS, // arithmetic expressions
-	GRAMM_VAR_DECL, GRAMM_FUNC, GRAMM_CLASS, // declaration statements
-	GRAMM_IF, GRAMM_WHILE, GRAMM_CONTROL, // statements
-	GRAMM_IDENTIFIER, GRAMM_NUMBER, GRAMM_FIXED, GRAMM_STRING, // literals
+	GRAMM_CALL = 9, // expressions
+	GRAMM_ASSIGN = 10, GRAMM_CAST = 11, // class stuff
+	GRAMM_COMPARE = 12, GRAMM_STR_COMPARE = 13, GRAMM_LOGIC = 14, GRAMM_OPERATION = 15, GRAMM_STR_OPERATION = 16, GRAMM_UNARY = 17, GRAMM_ACCESS = 18, // arithmetic expressions
+	GRAMM_VAR_DECL = 19, GRAMM_FUNC = 20, GRAMM_CLASS = 21, // declaration statements
+	GRAMM_IF = 22, GRAMM_WHILE = 23, GRAMM_CONTROL = 24, // statements
+	GRAMM_IDENTIFIER = 25, GRAMM_NUMBER = 26, GRAMM_FIXED = 27, GRAMM_STRING = 28, // literals
 };
 
 enum attribute_heat_e { ATTRIBUTE_HEAT_DEFAULT = 0, ATTRIBUTE_HEAT_FROZEN, ATTRIBUTE_HEAT_COLD, ATTRIBUTE_HEAT_WARM, ATTRIBUTE_HEAT_HOT };
@@ -219,6 +219,7 @@ void compile(node_t* self) {
 	
 	depth++;
 	self->ref = self->data;
+	uint8_t eat_attribute = 0;
 	
 	// inherit stuff from parent
 	
@@ -230,7 +231,7 @@ void compile(node_t* self) {
 		self->class = compiling_class ? class_stack[class_stack_index] : &main_class;
 	}
 	
-	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
+	printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
 	// big syntax elements
 	
@@ -242,6 +243,8 @@ void compile(node_t* self) {
 	// expressions
 	
 	else if (self->type == GRAMM_ACCESS) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		self->children[1]->parent = self->children[0];
 		compile(self->children[1]);
@@ -251,6 +254,8 @@ void compile(node_t* self) {
 		self->ref_code = self->children[1]->ref_code;
 		
 	} else if (self->type == GRAMM_CAST) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -259,6 +264,8 @@ void compile(node_t* self) {
 		self->ref_code = self->children[1]->ref_code;
 		
 	} else if (self->type == GRAMM_OPERATION) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -295,6 +302,8 @@ void compile(node_t* self) {
 		}
 		
 	} else if (self->type == GRAMM_STR_OPERATION) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -322,6 +331,8 @@ void compile(node_t* self) {
 		}
 		
 	} else if (self->type == GRAMM_LOGIC) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -335,6 +346,8 @@ void compile(node_t* self) {
 		fprintf(yyout, /* normalize left */ "mov g0 0\t%scnd %s\tmov g0 1\t" /* normalize right */ "mov g1 0\t%scnd %s\tmov g1 1\t" /* operation */ "%s g0 g1\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, instruction, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMM_COMPARE) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -349,6 +362,8 @@ void compile(node_t* self) {
 		else if (*self->data == '>') fprintf(yyout, "mov g0 1\t%smov g1 %s\t%scmp g1 %s\tcnd zf\tmov g0 0\tcmp sf of\txor zf 1\tcnd zf\tmov g0 0\t%smov %s g0\n", self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMM_STR_COMPARE) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -364,6 +379,8 @@ void compile(node_t* self) {
 			":$amber_internal_seq_loop_inline_%ld_end:\t%smov %s g0\n", *self->data == '=', self->children[0]->ref_code, self->children[0]->ref, self->children[1]->ref_code, self->children[1]->ref, current, *self->data != '=', current, current, current, current, current, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMM_ASSIGN) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		compile(self->children[1]);
 		
@@ -374,6 +391,8 @@ void compile(node_t* self) {
 		else if (*self->data == '?') fprintf(yyout, "%smov g0 %s\t%smov g1 %s\tmov 8?g1 g0\t%smov %s g0\n", self->children[1]->ref_code, self->children[1]->ref, self->children[0]->ref_code, self->children[0]->ref, self->ref_code, self->ref);
 		
 	} else if (self->type == GRAMM_UNARY) {
+		eat_attribute = 1;
+		
 		compile(self->children[0]);
 		generate_stack_entry(self);
 		
@@ -394,6 +413,8 @@ void compile(node_t* self) {
 		}
 		
 	} else if (self->type == GRAMM_CALL) {
+		eat_attribute = 1;
+		
 		if (strcmp(self->children[0]->data, "return") == 0) { // return
 			compile(self->children[1]);
 			fprintf(yyout, "%smov g0 %s\tret\n", self->children[1]->ref_code, self->children[1]->ref);
@@ -476,6 +497,8 @@ void compile(node_t* self) {
 	// declaration statements
 	
 	else if (self->type == GRAMM_VAR_DECL) {
+		eat_attribute = 1;
+		
 		char* ref_code = "";
 		char* ref = "0";
 		
@@ -507,6 +530,8 @@ void compile(node_t* self) {
 		}
 		
 	} else if (self->type == GRAMM_FUNC) {
+		eat_attribute = 1;
+		
 		uint8_t local = 1; /// TODO global attribute
 		uint64_t current_func_id;
 		depth++;
@@ -587,6 +612,11 @@ void compile(node_t* self) {
 		else if (strcmp(self->data, "fixed") == 0) attribute_state.number = ATTRIBUTE_NUMBER_FIXED;
 		else if (strcmp(self->data, "whole") == 0) attribute_state.number = ATTRIBUTE_NUMBER_WHOLE;
 		
+		if (self->child_count) { // is expression?
+			compile(self->children[0]);
+			memcpy(self, self->children[0], sizeof(*self));
+		}
+		
 	} else if (self->type == GRAMM_IF) {
 		compile(self->children[0]); // compile expression
 		
@@ -626,6 +656,7 @@ void compile(node_t* self) {
 	// literals
 	
 	else if (self->type == GRAMM_IDENTIFIER) {
+		eat_attribute = 1;
 		uint8_t stop = 0;
 		
 		for (int64_t i = ((class_t*) self->class)->variable_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
@@ -691,6 +722,8 @@ void compile(node_t* self) {
 		}
 		
 	} else if (self->type == GRAMM_STRING) {
+		eat_attribute = 1;
+		
 		self->ref = (char*) malloc(32);
 		sprintf(self->ref, "$amber_data_%ld", data_section_count++);
 		
@@ -699,6 +732,8 @@ void compile(node_t* self) {
 		fprintf(yyout, "0%%\n");
 		
 	} else if (self->type == GRAMM_FIXED) {
+		eat_attribute = 1;
+		
 		uint64_t decimal_part = 0;
 		const char* decimal_part_string = (const char*) self->children[1];
 		int decimal_part_bytes = strlen(decimal_part_string);
@@ -716,13 +751,18 @@ void compile(node_t* self) {
 		self->attribute_state.number = ATTRIBUTE_NUMBER_FIXED;
 		self->ref = (char*) malloc(32);
 		sprintf(self->ref, "%lld", atoll((const char*) self->children[0]) * FIXED_PRECISION + decimal_part);
+		
+	} else if (self->type == GRAMM_NUMBER) {
+		eat_attribute = 1;
 	}
 	
-	if (self->type == GRAMM_VAR_DECL) {
+	if (eat_attribute) {
 		for (int i = 0; i < sizeof(attribute_state); i++) {
 			if (((uint8_t*) &attribute_state)[i] != 0) ((uint8_t*) &self->attribute_state)[i] = ((uint8_t*) &attribute_state)[i];
 			((uint8_t*) &attribute_state)[i] = 0;
 		}
+		
+		printf("EAT_ATTRIBUTE %ld\n", self->attribute_state.number);
 	}
 	
 	decrement_depth();
