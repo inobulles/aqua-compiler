@@ -122,7 +122,7 @@ W [ \t\v\n\f]
 "byte" return BYTE;
 
 "frozen" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
-"warm" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
+"mild" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 "fixed" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 "whole" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 

@@ -36,7 +36,7 @@ enum grammar_e {
 	GRAMM_IDENTIFIER = 25, GRAMM_NUMBER = 26, GRAMM_FIXED = 27, GRAMM_STRING = 28, // literals
 };
 
-enum attribute_heat_e { ATTRIBUTE_HEAT_DEFAULT = 0, ATTRIBUTE_HEAT_FROZEN, ATTRIBUTE_HEAT_COLD, ATTRIBUTE_HEAT_WARM, ATTRIBUTE_HEAT_HOT };
+enum attribute_heat_e { ATTRIBUTE_HEAT_DEFAULT = 0, ATTRIBUTE_HEAT_FROZEN, ATTRIBUTE_HEAT_COLD, ATTRIBUTE_HEAT_MILD, ATTRIBUTE_HEAT_HOT };
 enum attribute_number_e { ATTRIBUTE_NUMBER_DEFAULT = 0, ATTRIBUTE_NUMBER_FIXED, ATTRIBUTE_NUMBER_WHOLE };
 
 typedef struct { // NOTE default state should always be 0 for each attribute
@@ -231,7 +231,7 @@ void compile(node_t* self) {
 		self->class = compiling_class ? class_stack[class_stack_index] : &main_class;
 	}
 	
-	printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
+	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
 	// big syntax elements
 	
@@ -494,7 +494,6 @@ void compile(node_t* self) {
 			generate_stack_entry(self);
 			fprintf(yyout, "%smov %s g0\n", self->ref_code, self->ref);
 			memcpy(&self->attribute_state, &self->children[0]->attribute_state, sizeof(self->attribute_state));
-			printf("%d NUMBER %d\n", self->type, self->attribute_state.number);
 		}
 	}
 	
@@ -503,7 +502,6 @@ void compile(node_t* self) {
 	else if (self->type == GRAMM_VAR_DECL) {
 		attribute_state_t previous_attribute_state;
 		memcpy(&previous_attribute_state, &attribute_state, sizeof(attribute_state));
-		printf("PREV %d\n", previous_attribute_state.number);
 		memset(&attribute_state, 0, sizeof(attribute_state));
 		
 		char* ref_code = "";
@@ -522,7 +520,6 @@ void compile(node_t* self) {
 			memcpy(&self->attribute_state, &self->children[2]->attribute_state, sizeof(attribute_state));
 			
 			for (int i = 0; i < sizeof(previous_attribute_state); i++) if (((uint8_t*) &previous_attribute_state)[i] != 0) {
-				printf("WRANG\n");
 				((uint8_t*) &self->attribute_state)[i] = ((uint8_t*) &previous_attribute_state)[i];
 			}
 			
@@ -540,8 +537,6 @@ void compile(node_t* self) {
 			create_reference(self, bytes);
 			fprintf(yyout, "%smov g0 %s\tcad bp sub %ld\tmov ?ad g0\n", ref_code, ref, self->stack_pointer);
 		}
-		
-		printf("VARDECLNUMBER %d\n", self->attribute_state.number);
 		
 	} else if (self->type == GRAMM_FUNC) {
 		memcpy(&self->attribute_state, &attribute_state, sizeof(attribute_state));
@@ -633,7 +628,7 @@ void compile(node_t* self) {
 	
 	else if (self->type == GRAMM_ATTRIBUTE) {
 		if (strcmp(self->data, "frozen") == 0) attribute_state.heat = ATTRIBUTE_HEAT_FROZEN;
-		else if (strcmp(self->data, "warm") == 0) attribute_state.heat = ATTRIBUTE_HEAT_WARM;
+		else if (strcmp(self->data, "mild") == 0) attribute_state.heat = ATTRIBUTE_HEAT_MILD;
 		
 		else if (strcmp(self->data, "fixed") == 0) attribute_state.number = ATTRIBUTE_NUMBER_FIXED;
 		else if (strcmp(self->data, "whole") == 0) attribute_state.number = ATTRIBUTE_NUMBER_WHOLE;
@@ -641,10 +636,15 @@ void compile(node_t* self) {
 		if (self->data_bytes == 1) { // is expression?
 			attribute_state_t prev_attribute_state;
 			memcpy(&prev_attribute_state, &attribute_state, sizeof(attribute_state));
+			memset(&attribute_state, 0, sizeof(attribute_state));
 			
 			compile(self->children[0]);
 			memcpy(self, self->children[0], sizeof(*self));
-			memset(&attribute_state, 0, sizeof(attribute_state));
+			
+			for (int i = 0; i < sizeof(prev_attribute_state); i++) {
+				if (((uint8_t*) &prev_attribute_state)[i] != 0) ((uint8_t*) &self->attribute_state)[i] = ((uint8_t*) &prev_attribute_state)[i];
+				((uint8_t*) &prev_attribute_state)[i] = 0;
+			}
 		}
 		
 	} else if (self->type == GRAMM_IF) {

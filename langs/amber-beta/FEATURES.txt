@@ -15,6 +15,8 @@ Debated features which may not implemented as stated or even implmented at all a
 
 === ATTRIBUTES ===
 
+- fixed
+- whole
 + freeze
 + debug
 + auto, manual
@@ -36,13 +38,14 @@ Debated features which may not implemented as stated or even implmented at all a
 * do ... while (seriously, what's the point? I'll add it if people want it, but I don't see the point)
 * for (I'm not sure what the best way of implementing these should be. I honestly can't find any other reason to have this in Amber apart from if it's some kind of for ... in ... loop)
 - func (functions)
-+ class (name spaces)
+- class (name spaces)
 - return
 * lab and goto
 - declarations
 
 === OPERATIONS ===
 
+- Fixed point multiplication (*), division (/)
 - Integer addition (+), subtraction (-), multiplication (*), division (/)
 - Integer modulo (%)
 - Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
@@ -53,7 +56,7 @@ Debated features which may not implemented as stated or even implmented at all a
 - Unary minus (-)
 - Unary plus (+)
 - Pointer reference (&), dereference (?) and byte dereference (*)
-+ Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>)
+- Bitwise and (&), or (|), xor (^), left shift (<<), right shift (>>)
 - Two's complement (~)
 * Integer increment (++) and decrement (--)
 - String concatenation (++)
@@ -67,16 +70,15 @@ Debated features which may not implemented as stated or even implmented at all a
 
 - var
 - byte
-+ flt
 * bool
 + [] (lists)
-+ class (data structures)
+- class (data structures)
 
 === LITERALS ===
 
 - String literals
 - Decimal interger literals
-+ Floating point literals
+- Fixed point literals
 + Array literals
 - Hexadecimal integer literals
 + Binary integer literals
