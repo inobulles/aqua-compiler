@@ -103,7 +103,7 @@ left_pointer8: '?' expression { $$ = $2; }
 
 expression
 	: '(' expression ')' %prec ABS_PREC { $$ = $2; }
-	| ATTRIBUTE expression { $$ = new_node(GRAMM_ATTRIBUTE, 0, $1.data, 1, $2); }
+	| ATTRIBUTE expression { $$ = new_node(GRAMM_ATTRIBUTE, 1, $1.data, 1, $2); }
 	
 	| left_pointer1 '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "*", 2, $1, $3); }
 	| left_pointer8 '=' expression { $$ = new_node(GRAMM_ASSIGN, 0, "?", 2, $1, $3); }
@@ -160,7 +160,8 @@ expression
 	;
 
 argument
-	: data_type IDENTIFIER { $$ = new_node(GRAMM_ARGUMENT, 0, $2.data, 1, $1); }
+	: ATTRIBUTE argument { $$ = new_node(GRAMM_ATTRIBUTE, 0, $1.data, 1, $2); }
+	| data_type IDENTIFIER { $$ = new_node(GRAMM_ARGUMENT, 0, $2.data, 1, $1); }
 	| expression CAST data_type IDENTIFIER { $$ = new_node(GRAMM_ARGUMENT, 0, $4.data, 2, $3, $1); }
 	;
 

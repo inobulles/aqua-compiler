@@ -231,7 +231,7 @@ void compile(node_t* self) {
 		self->class = compiling_class ? class_stack[class_stack_index] : &main_class;
 	}
 	
-	printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
+	//~ printf("node = %p\tline = %d\ttype = %d\tdata = %s\n", self, self->line, self->type, self->data);
 	
 	// big syntax elements
 	
@@ -552,6 +552,17 @@ void compile(node_t* self) {
 			node_t* argument_list_root = self->children[1];
 			while (argument_list_root) {
 				node_t* argument_node = argument_list_root->type == GRAMM_LIST_ARGUMENT ? argument_list_root->children[0] : argument_list_root;
+				
+				while (argument_node->type == GRAMM_ATTRIBUTE) {
+					compile(argument_node);
+					argument_node = argument_node->children[0];
+					
+					for (int i = 0; i < sizeof(attribute_state); i++) {
+						if (((uint8_t*) &attribute_state)[i] != 0) ((uint8_t*) &argument_node->attribute_state)[i] = ((uint8_t*) &attribute_state)[i];
+						((uint8_t*) &attribute_state)[i] = 0;
+					}
+				}
+				
 				create_reference(argument_node, (uint8_t) (uint64_t) argument_node->children[0]);
 				fprintf(yyout, "cad bp sub %ld\tmov ?ad %s\n", argument_node->stack_pointer, argument_registers[argument++]);
 				
@@ -612,7 +623,7 @@ void compile(node_t* self) {
 		else if (strcmp(self->data, "fixed") == 0) attribute_state.number = ATTRIBUTE_NUMBER_FIXED;
 		else if (strcmp(self->data, "whole") == 0) attribute_state.number = ATTRIBUTE_NUMBER_WHOLE;
 		
-		if (self->child_count) { // is expression?
+		if (self->data_bytes == 1) { // is expression?
 			compile(self->children[0]);
 			memcpy(self, self->children[0], sizeof(*self));
 		}
@@ -761,8 +772,6 @@ void compile(node_t* self) {
 			if (((uint8_t*) &attribute_state)[i] != 0) ((uint8_t*) &self->attribute_state)[i] = ((uint8_t*) &attribute_state)[i];
 			((uint8_t*) &attribute_state)[i] = 0;
 		}
-		
-		printf("EAT_ATTRIBUTE %ld\n", self->attribute_state.number);
 	}
 	
 	decrement_depth();
