@@ -8,6 +8,8 @@
 #define FIXED_PRECISION 1000000
 #define PRECISION_ROOT "1000"
 
+const char* REF_ZERO = "0";
+
 extern int yylex(void);
 extern int yyparse(void);
 
@@ -432,6 +434,11 @@ void compile(node_t* self) {
 				fprintf(yyout, "%smov a0 %s\tcal malloc\tmov a2 a0\tmov a0 g0\tmov a1 0\tcal mset\tmov g0 a0\t", self->children[1]->ref_code, self->children[1]->ref);
 				self->class = self->children[1]->class;
 				
+				for (uint64_t i = 0; i < ((class_t*) self->class)->variable_count; i++) { // copy initial contents of class to instance
+					class_variable_t* variable = &((class_t*) self->class)->variables[i];
+					if (variable->initial_value_ref != REF_ZERO) fprintf(yyout, "%smov g1 %s\tcad g0 add %ld\tmov ?ad g1\t", variable->initial_value_ref_code, variable->initial_value_ref, variable->offset);
+				}
+				
 			} else {
 				compile(self->children[0]);
 				
@@ -505,7 +512,7 @@ void compile(node_t* self) {
 		memset(&attribute_state, 0, sizeof(attribute_state));
 		
 		char* ref_code = "";
-		char* ref = "0";
+		char* ref = (char*) REF_ZERO;
 		
 		uint8_t class = self->data_bytes;
 		if (class) {
@@ -689,20 +696,28 @@ void compile(node_t* self) {
 		gobble_attribute = 1;
 		uint8_t stop = 0;
 		
-		for (int64_t i = ((class_t*) self->class)->variable_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) {
-			self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
-			sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, ((class_t*) self->class)->variables[i].offset);
+		for (int64_t i = ((class_t*) self->class)->variable_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->variables[i].name) == 0) { // variable in class
+			class_variable_t* variable = &((class_t*) self->class)->variables[i];
+			
+			if (self->parent->is_raw_class_name) {
+				self->ref_code = (char*) variable->initial_value_ref_code;
+				self->ref = (char*) variable->initial_value_ref;
+				
+			} else {
+				self->ref_code = (char*) malloc(strlen(self->parent->ref_code) + 32);
+				sprintf(self->ref_code, "%scad %s add %ld\t", self->parent->ref_code, self->parent->ref, variable->offset);
+				self->ref = "?ad";
+			}
 			
 			// inherit from variable
 			
-			self->class = ((class_t*) self->class)->variables[i].class;
-			memcpy(&self->attribute_state, &((class_t*) self->class)->variables[i].attribute_state, sizeof(self->attribute_state));
+			self->class = variable->class;
+			memcpy(&self->attribute_state, &variable->attribute_state, sizeof(self->attribute_state));
 			
-			self->ref = "?ad";
 			stop = 1;
 			break;
 			
-		} for (int64_t i = ((class_t*) self->class)->function_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) {
+		} for (int64_t i = ((class_t*) self->class)->function_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, ((class_t*) self->class)->functions[i]->data) == 0) { // function in class
 			self->ref_code = (char*) malloc(32);
 			sprintf(self->ref_code, "cad bp sub %ld\t", self->stack_pointer = ((class_t*) self->class)->functions[i]->stack_pointer);
 			memcpy(&self->attribute_state, &((class_t*) self->class)->functions[i]->attribute_state, sizeof(self->attribute_state));
@@ -716,7 +731,7 @@ void compile(node_t* self) {
 		uint8_t first_loop = 1;
 		
 		while (!stop) {
-			for (int64_t i = current->class_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, current->classes[i]->name) == 0) {
+			for (int64_t i = current->class_count - 1; !stop && i >= 0; i--) if (strcmp(self->data, current->classes[i]->name) == 0) { // raw class name
 				self->ref_code = "";
 				self->ref = (char*) malloc(16);
 				
@@ -738,7 +753,7 @@ void compile(node_t* self) {
 			}
 		}
 		
-		for (int64_t i = reference_count - 1; !stop && i >= 0; i--) if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) {
+		for (int64_t i = reference_count - 1; !stop && i >= 0; i--) if (references[i]->scope_depth >= 0 && strcmp(self->data, references[i]->data) == 0) { // global reference
 			// inherit from reference
 			
 			self->class = references[i]->class;
