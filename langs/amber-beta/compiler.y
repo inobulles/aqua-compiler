@@ -92,7 +92,7 @@ statement
 	| CONTROL { $$ = new_node(GRAMM_CONTROL, 0, $1.data, 0); }
 	
 	| RETURN expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), $2); }
-	| RETURN ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), new_node(GRAMM_NUMBER, 0, "0", 0)); }
+	| RETURN ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, new_node(GRAMM_IDENTIFIER, 0, "return", 0), new_node(GRAMM_NUMBER, 0, (char*) REF_ZERO, 0)); }
 	
 	| ATTRIBUTE { $$ = new_node(GRAMM_ATTRIBUTE, 0, $1.data, 0); }
 	| expression list_expression ';' { $$ = new_node(GRAMM_CALL, 0, "", 2, $1, $2); }
