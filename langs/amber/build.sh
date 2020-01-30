@@ -1,7 +1,7 @@
 
 #!/bin/sh
 set -e
-echo "Compiling with Amber 1.1.0 (stable) ..."
+echo "Compiling with Amber 1.2.0 (stable) ..."
 
 update=""
 git_prefix="https://github.com"
@@ -35,8 +35,8 @@ cp -rf lib src
 flex compiler.l
 yacc compiler.y -d
 
-gcc -O3 -c lex.yy.c -o lex.yy.o
-gcc -O3 -c y.tab.c  -o y.tab.o
+gcc -O2 -c lex.yy.c -o lex.yy.o
+gcc -O2 -c y.tab.c  -o y.tab.o -DYYINITDEPTH=512
 
 #~ gcc -O0 -c lex.yy.c -o lex.yy.o -g
 #~ gcc -O0 -c y.tab.c  -o y.tab.o -g

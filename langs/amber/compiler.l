@@ -99,9 +99,14 @@ W [ \t\v\n\f]
 	}
 }
 <<EOF>> {
-	yypop_buffer_state();
-	yylineno = import_lineno[--import_lineno_index];
-	if (!YY_CURRENT_BUFFER) yyterminate();
+	//~ if (!import_lineno_index) {
+		//~ YYABORT;
+		
+	//~ } else {
+		yypop_buffer_state();
+		yylineno = import_lineno[--import_lineno_index];
+		if (!YY_CURRENT_BUFFER) yyterminate();
+	//~ }
 }
 
 "/*" comment(); // comments
@@ -121,8 +126,10 @@ W [ \t\v\n\f]
 "var"  return VAR; // data type keywords
 "byte" return BYTE;
 
-"freeze" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
-"global" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
+"frozen" { yylval.data.data = strdup(yytext); return ATTRIBUTE; } // attribute keywords
+"mild" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
+"fixed" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
+"whole" { yylval.data.data = strdup(yytext); return ATTRIBUTE; }
 
 "++" return STR_CAT; // string operators
 "%%" return STR_FORMAT;

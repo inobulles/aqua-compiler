@@ -15,8 +15,8 @@ Debated features which may not implemented as stated or even implmented at all a
 
 === ATTRIBUTES ===
 
-- fixed
-- whole
++ fixed
++ whole
 + freeze
 + debug
 + auto, manual
@@ -45,7 +45,7 @@ Debated features which may not implemented as stated or even implmented at all a
 
 === OPERATIONS ===
 
-- Fixed point multiplication (*), division (/)
++ Fixed point multiplication (*), division (/)
 - Integer addition (+), subtraction (-), multiplication (*), division (/)
 - Integer modulo (%)
 - Integer comparison conditions: equal to (==), not equal to (!=) greater than (>), less than (<), greater or equal (>=), less or equal (<=)
@@ -78,7 +78,7 @@ Debated features which may not implemented as stated or even implmented at all a
 
 - String literals
 - Decimal interger literals
-- Fixed point literals
++ Fixed point literals
 + Array literals
 - Hexadecimal integer literals
 + Binary integer literals
