@@ -33,6 +33,13 @@ mkdir package
 echo "zed" > package/start
 mv rom.zed package/rom.zed
 
+if [ -f "code/unique" ]; then
+	echo "Moving unique file to package ..."
+else
+	echo "No unique file found, automatically creating one ..."
+	echo -n "temp`date +%s`$RANDOM" > package/unique
+fi
+
 if [ -d "code/meta" ]; then
 	echo "Moving meta folder to package ..."
 	mv code/meta package/meta
