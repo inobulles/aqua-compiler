@@ -15,3 +15,6 @@ Will be the current working directory by default.
 ## --output [path to output]
 Specify where you want the output package to be.
 Will be `package.zpk` in the current working directory by default.
+
+## --update
+Update the libraries.
