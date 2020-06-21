@@ -377,6 +377,37 @@ static void assembler_free(void) {
 }
 
 int main(int argc, char* argv[]) {
+<<<<<<< HEAD
+	printf("[ZASM Compiler] Compiling with ZASM 1.0.0 (stable) ...\n");
+
+	printf("[ZASM Compiler] Parsing arguments ...\n");
+	for (int i = 1; i < argc; i++) {
+		if (strncmp(argv[i], "--", 2) == 0) { // argument is option
+			char* option = argv[i] + 2;
+
+			if (strcmp(option, "help") == 0) {
+				printf("ZASM Compiler command-line executable help\n");
+				printf("`--help`: Print out information on each argument.\n");
+				printf("`--path [project path]`: Specify where the project path is.\n");
+				printf("`--output [output path]`: Specify where the compiler should output its ROM file.");
+				printf("`--verbose`: Print out verbose information.\n");
+				printf("`--suppress`: Suppress warning messages.\n");
+				printf("`--no-checks`: Disable extra checks.\n");
+				return 0;
+
+			}
+
+			else if (strcmp(option, "path") == 0) project_path = argv[++i];
+			else if (strcmp(option, "output") == 0) output_path = argv[++i];
+
+			else if (strcmp(option, "verbose") == 0) assembler_verbose = 1;
+			else if (strcmp(option, "suppress") == 0) assembler_warnings = 0;
+			else if (strcmp(option, "no-checks") == 0) assembler_extra_checks = 0;
+
+			else {
+				fprintf(stderr, "[ZASM Compiler] ERROR Option `--%s` is unknown. Run with `--help` to see a list of available options\n", option);
+				return 1;
+=======
 	for (int i = 0; i < argc; i++) {
 		if (strcmp(argv[i], "verbose") == 0) {
 			assembler_verbose = 1;
@@ -407,6 +438,7 @@ int main(int argc, char* argv[]) {
 			else if (assembler_verbose) {
 				printf("WARNING Unknown target %s\n", target);
 				
+>>>>>>> parent of 6c35308... Changed compiler completely
 			}
 			
 		} else if (assembler_verbose) {
