@@ -414,12 +414,12 @@ int main(int argc, char* argv[]) {
 	char cwd[PATH_MAX + 1];
 	getcwd(cwd, sizeof(cwd));
 
-	printf("[ZASM Compiler] Opening input file ...");
+	printf("[ZASM Compiler] Opening input file ...\n");
 	chdir(project_path);
 
 	input = fopen("main.asm", "rb");
 	if (!input) {
-		fprintf(stderr, "[ZASM Compiler] ERROR Could not open %s/main.asm file (as input)\n", project_path);
+		fprintf(stderr, "[ZASM Compiler] ERROR Could not open %s/main.asm for reading\n", project_path);
 		assembler_free();
 		return 1;
 	}
@@ -451,7 +451,7 @@ int main(int argc, char* argv[]) {
 	
 	output = fopen(output_path, "wb");
 	if (!output) {
-		fprintf(stderr, "[ZASM Compiler] ERROR Could not open %s file (as output)\n", output_path);
+		fprintf(stderr, "[ZASM Compiler] ERROR Could not open %s for writing\n", output_path);
 		assembler_free();
 		return 1;
 		

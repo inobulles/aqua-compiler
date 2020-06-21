@@ -35,9 +35,9 @@ output=`realpath $output`
 echo "[AQUA Compiler] Setting everything up for compilation ..."
 
 cd `dirname $0`
-lang_path=`realpath langs/$lang`
+lang_path=`realpath langs`
 
-if [ ! -f $lang_path ]; then
+if [ ! -f $lang_path/$lang ]; then
     echo "[AQUA Compiler] ERROR The language '$lang' is not available"
     exit 1
 fi
@@ -54,7 +54,13 @@ cd $compiler_files
 cp -r $path project
 
 mkdir package
-$lang_path --path project --output package/rom.zed
+$lang_path/$lang --path project --output package/rom.zed
+
+if [ `echo $lang | grep amber*` ]; then
+    echo "[AQUA Compiler] Using Amber programming language, so running assembly pass on output ..."
+    mv package/rom.zed main.asm
+    $lang_path/asm --path project --output package/rom.zed
+fi
 
 echo "[AQUA Compiler] Creating package ..."
 echo "zed" > package/start
