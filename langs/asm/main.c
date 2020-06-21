@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <unistd.h>
+#include <linux/limits.h>
 
 #define DATA_LABEL_TOKEN '%'
 #define RES_POS_LABEL_TOKEN ':'
@@ -34,7 +36,7 @@ static uint8_t assembler_verbose = 0;
 static uint8_t assembler_warnings = 1;
 static uint8_t assembler_extra_checks = 1;
 
-static char* input_path = "code.asm";
+static char* project_path = ".";
 static char* output_path = "rom.zed";
 
 #define ASSEMBLER_TARGET_ZED 0
@@ -62,7 +64,7 @@ static inline int64_t assembler_store_token(token_t* self, char* string) {
 	memset(self, 0, sizeof(*self));
 	uint8_t warn_too_big = 0;
 	for (; !(self->bytes >= MAX_TOKEN_LENGTH && (warn_too_big = 1) /* look at this beauty */) && !IS_WHITE(*string); self->bytes++) self->data[self->bytes] = *string++;
-	if (warn_too_big && assembler_warnings) printf("WARNING Line %ld, token %s has surpassed the maximum length (%d)\n", current_line_number, self->data, MAX_TOKEN_LENGTH);
+	if (warn_too_big && assembler_warnings) printf("[ZASM Compiler] WARNING Line %ld, token %s has surpassed the maximum length (%d)\n", current_line_number, self->data, MAX_TOKEN_LENGTH);
 	return self->bytes - 1;
 	
 } static inline int64_t assembler_token_index_with_string(uint64_t count, token_t* list, const char* comparator) { // search through list of tokens and find index of matching token (returns -1 if no match)
@@ -122,7 +124,7 @@ static int assemble(void) {
 	uint8_t in_comment = 0;
 	uint8_t in_string = 0;
 	
-	if (assembler_verbose) printf("Indexing all the label names and parsing data sections ...\n");
+	if (assembler_verbose) printf("[ZASM Compiler] Indexing all the label names and parsing data sections ...\n");
 	current_line_number = 1;
 	for (uint64_t i = 0; i < code_bytes; i++) {
 		char* current = code + i;
@@ -158,10 +160,10 @@ static int assemble(void) {
 					
 					int64_t byte = 0;
 					if (assembler_token_to_number(&token, &byte)) {
-						printf("WARNING Line %ld, found unknown token %s in data label %s\n", current_line_number, token.data, current_data_label->data);
+						printf("[ZASM Compiler] WARNING Line %ld, found unknown token %s in data label %s\n", current_line_number, token.data, current_data_label->data);
 						
 					} if (byte > 0xFF) {
-						printf("WARNING Line %ld, value %ld does not fit in a byte\n", current_line_number, byte);
+						printf("[ZASM Compiler] WARNING Line %ld, value %ld does not fit in a byte\n", current_line_number, byte);
 						byte %= 0x100;
 						
 					}
@@ -174,12 +176,12 @@ static int assemble(void) {
 			} else if (!in_string && *current == RES_POS_LABEL_TOKEN) { // found reserved position label
 				res_pos_label_identifiers = (token_t*) realloc(res_pos_label_identifiers, (res_pos_label_count + 2) * sizeof(token_t));
 				i += 2 + assembler_store_token(&res_pos_label_identifiers[res_pos_label_count++], current + 1);
-				if (assembler_extra_checks && assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &res_pos_label_identifiers[res_pos_label_count - 1]) < res_pos_label_count - 1) printf("WARNING Line %ld, reserved position label %s declared multiple times\n", current_line_number, res_pos_label_identifiers[res_pos_label_count - 1].data);
+				if (assembler_extra_checks && assembler_token_index(res_pos_label_count, res_pos_label_identifiers, &res_pos_label_identifiers[res_pos_label_count - 1]) < res_pos_label_count - 1) printf("[ZASM Compiler] WARNING Line %ld, reserved position label %s declared multiple times\n", current_line_number, res_pos_label_identifiers[res_pos_label_count - 1].data);
 				
 			} else if (!in_string && *current == DATA_LABEL_TOKEN) { // found data label
 				data_label_identifiers = (token_t*) realloc(data_label_identifiers, (data_label_count + 2) * sizeof(token_t));
 				i += 1 + assembler_store_token(&data_label_identifiers[data_label_count], current + 1);
-				if (assembler_extra_checks && assembler_token_index(data_label_count, data_label_identifiers, &data_label_identifiers[data_label_count]) < data_label_count) printf("WARNING Line %ld, data label %s declared multiple times\n", current_line_number, data_label_identifiers[data_label_count].data);
+				if (assembler_extra_checks && assembler_token_index(data_label_count, data_label_identifiers, &data_label_identifiers[data_label_count]) < data_label_count) printf("[ZASM Compiler] WARNING Line %ld, data label %s declared multiple times\n", current_line_number, data_label_identifiers[data_label_count].data);
 				data_label_identifiers[data_label_count].data_label_array = (uint8_t*) malloc(1);
 				current_data_label = &data_label_identifiers[data_label_count++];
 				
@@ -199,7 +201,7 @@ static int assemble(void) {
 	text_section_data = (uint8_t*) malloc(1);
 	*text_section_data = 0;
 	
-	if (assembler_verbose) printf("Reading assembly and building text section ...\n");
+	if (assembler_verbose) printf("[ZASM Compiler] Reading assembly and building text section ...\n");
 	current_line_number = 1;
 	for (uint64_t i = 0; i < code_bytes; i++) {
 		char* current = code + i;
@@ -259,33 +261,28 @@ static int assemble(void) {
 						string = token.data + 2;
 						
 					} else {
-						printf("WARNING Line %ld, unknown addressing type %c\n", current_line_number, *current);
+						printf("[ZASM Compiler] WARNING Line %ld, unknown addressing type %c\n", current_line_number, *current);
 						
 					}
 					
 					if (string) { // create the cla instruction chain (or not if is a single register)
 						if ((_register = assembler_token_index_with_string(sizeof(assembler_registers) / sizeof(*assembler_registers), assembler_registers, string)) >= 0) assembler_add_token(token_type, _register);
-						else printf("WARNING Line %ld, address %s is not a register\n", current_line_number, string);
+						else printf("[ZASM Compiler] WARNING Line %ld, address %s is not a register\n", current_line_number, string);
 						
 					}
 					
 				} else { // test if maybe this is a number literal
 					int64_t number = 0;
 					
-					if (assembler_token_to_number(&token, &number)) printf("WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
+					if (assembler_token_to_number(&token, &number)) printf("[ZASM Compiler] WARNING Line %ld, unknown token or identifier %s\n", current_line_number, token.data);
 					else assembler_add_token(TOKEN_NUMBER, number);
-					
 				}
-				
 			}
-			
 		}
-		
 	}
 	
 	if (!found_main_label) {
-		printf("WARNING Could not find the main reserved position label\n");
-		
+		printf("[ZASM Compiler] WARNING Could not find the main reserved position label\n");
 	}
 	
 	return 0;
@@ -377,7 +374,6 @@ static void assembler_free(void) {
 }
 
 int main(int argc, char* argv[]) {
-<<<<<<< HEAD
 	printf("[ZASM Compiler] Compiling with ZASM 1.0.0 (stable) ...\n");
 
 	printf("[ZASM Compiler] Parsing arguments ...\n");
@@ -393,8 +389,8 @@ int main(int argc, char* argv[]) {
 				printf("`--verbose`: Print out verbose information.\n");
 				printf("`--suppress`: Suppress warning messages.\n");
 				printf("`--no-checks`: Disable extra checks.\n");
-				return 0;
 
+				return 0;
 			}
 
 			else if (strcmp(option, "path") == 0) project_path = argv[++i];
@@ -407,88 +403,66 @@ int main(int argc, char* argv[]) {
 			else {
 				fprintf(stderr, "[ZASM Compiler] ERROR Option `--%s` is unknown. Run with `--help` to see a list of available options\n", option);
 				return 1;
-=======
-	for (int i = 0; i < argc; i++) {
-		if (strcmp(argv[i], "verbose") == 0) {
-			assembler_verbose = 1;
-			printf("Verbose flag set\n");
-			
-		} else if (strcmp(argv[i], "suppress") == 0) {
-			assembler_warnings = 0;
-			if (assembler_verbose) printf("Disabled warnings\n");
-			
-		} else if (strcmp(argv[i], "no-checks") == 0) {
-			assembler_extra_checks = 0;
-			if (assembler_verbose) printf("Disabled extra checks\n");
-			
-		} else if (strcmp(argv[i], "in") == 0) {
-			input_path = argv[++i];
-			if (assembler_verbose) printf("Set input path to %s\n", input_path);
-			
-		} else if (strcmp(argv[i], "out") == 0) {
-			output_path = argv[++i];
-			if (assembler_verbose) printf("Set output path to %s\n", output_path);
-			
-		} else if (strcmp(argv[i], "target") == 0) { /// TODO not sure if this will even be in C version, or if ill wait until rewriting this assembler in Amber
-			char* target = argv[++i];
-			
-			if      (strcmp(target, "zed") == 0) assembler_target = ASSEMBLER_TARGET_ZED;
-			else if (strcmp(target, "x86") == 0) assembler_target = ASSEMBLER_TARGET_X86;
-			
-			else if (assembler_verbose) {
-				printf("WARNING Unknown target %s\n", target);
-				
->>>>>>> parent of 6c35308... Changed compiler completely
 			}
 			
-		} else if (assembler_verbose) {
-			printf("WARNING Unknown flag %s\n", argv[i]);
-			
+		} else {
+			fprintf(stderr, "[ZASM Compiler] ERROR Unexpected argument `%s`\n", argv[i]);
+			return 1;
 		}
-		
 	}
 	
-	input = fopen(input_path, "rb");
+	char cwd[PATH_MAX + 1];
+	getcwd(cwd, sizeof(cwd));
+
+	printf("[ZASM Compiler] Opening input file ...");
+	chdir(project_path);
+
+	input = fopen("main.asm", "rb");
 	if (!input) {
-		fprintf(stderr, "ERROR Could not load %s file (as input)\n", input_path);
+		fprintf(stderr, "[ZASM Compiler] ERROR Could not open %s/main.asm file (as input)\n", project_path);
 		assembler_free();
 		return 1;
-		
 	}
 	
 	fseek(input, 0, SEEK_END);
 	code_bytes = ftell(input);
-	if (assembler_verbose) printf("ASM File is %ld bytes long\n", code_bytes);
+	if (assembler_verbose) printf("[ZASM Compiler] ASM File is %ld bytes long\n", code_bytes);
 	rewind(input);
 	
 	code = (char*) malloc(code_bytes);
 	fread(code, sizeof(char), code_bytes, input);
 	
+	printf("[ZASM Compiler] Assembling code ...\n");
 	if (assemble()) {
-		fprintf(stderr, "ERROR Failed to assemble\n");
+		fprintf(stderr, "[ZASM Compiler] ERROR Failed to assemble\n");
 		assembler_free();
 		return 1;
-		
-	} if (build_rom()) {
-		fprintf(stderr, "ERROR Failed to build ROM\n");
-		assembler_free();
-		return 1;
-		
 	}
+	
+	printf("[ZASM Compiler] Building ROM ...\n");
+	if (build_rom()) {
+		fprintf(stderr, "[ZASM Compiler] ERROR Failed to build ROM\n");
+		assembler_free();
+		return 1;
+	}
+
+	printf("[ZASM Compiler] Outputting ROM ...\n");
+	chdir(cwd);
 	
 	output = fopen(output_path, "wb");
 	if (!output) {
-		fprintf(stderr, "ERROR Could not load %s file (as output)\n", output_path);
+		fprintf(stderr, "[ZASM Compiler] ERROR Could not open %s file (as output)\n", output_path);
 		assembler_free();
 		return 1;
 		
 	}
 	
-	if (assembler_verbose) printf("Writing ROM (%ld bytes) to output path (%s) ...\n", rom_bytes, output_path);
+	if (assembler_verbose) printf("[ZASM Compiler] Writing ROM (%ld bytes) to output path (%s) ...\n", rom_bytes, output_path);
 	if (rom_data) fwrite(rom_data, sizeof(uint8_t), rom_bytes, output);
-	if (assembler_verbose) printf("Assembler finished with success\n");
+	if (assembler_verbose) printf("[ZASM Compiler] Assembler finished with success\n");
 	
 	assembler_free();
+	printf("[ZASM Compiler] Done\n");
+
 	return 0;
-	
 }
