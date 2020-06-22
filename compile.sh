@@ -80,7 +80,7 @@ $compiler_path/langs/$lang --path project --output package/rom.zed
 
 if [ `echo $lang | grep amber*` ]; then
     echo "[AQUA Compiler] Using Amber programming language, so running assembly pass on output ..."
-    mv package/rom.zed main.asm
+    mv package/rom.zed project/main.asm
     $compiler_path/langs/asm --path project --output package/rom.zed
 fi
 
