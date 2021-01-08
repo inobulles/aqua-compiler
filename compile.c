@@ -22,6 +22,23 @@
 #define DEFAULT_LANGUAGE "amber"
 #define DEFAULT_TARGET "aqua"
 
+static inline int wait_for_process(const char* process_type) {
+	int wstatus = 0;
+	while (wait(&wstatus) > 0);
+
+	if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus)) {
+		fprintf(stderr, "[AQUA Compiler] ERROR %s process failed\n", process_type);
+		return 1;
+	}
+
+	if (WIFSIGNALED(wstatus)) {
+		fprintf(stderr, "[AQUA Compiler] ERROR %s process crashed\n", process_type);
+		return 1;
+	}
+
+	return 0;
+}
+
 int main(int argc, char** argv) {
 	char* input_path = DEFAULT_PATH;
 	char* output_path = (char*) 0;
@@ -134,13 +151,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	printf("[AQUA Compiler] Waiting for child language process to finish ...\n");
-
-	int wstatus = 0;
-	while (wait(&wstatus) > 0);
-
-	if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus)) {
-		fprintf(stderr, "[AQUA Compiler] ERROR lang process failed\n");
+	if (wait_for_process("lang")) {
 		return 1;
 	}
 
@@ -161,11 +172,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	wstatus = 0;
-	while (wait(&wstatus) > 0);
-
-	if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus)) {
-		fprintf(stderr, "[AQUA Compiler] ERROR targ process failed\n");
+	if (wait_for_process("targ")) {
 		return 1;
 	}
 	
