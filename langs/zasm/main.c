@@ -42,7 +42,7 @@ static inline int64_t assembler_name_token(zed_token_t* self, char* string) {
 
 static inline int64_t assembler_add_token(zed_token_t** list, uint64_t* count, char* string) {
 	*list = (zed_token_t*) realloc(*list, (*count + 1) * sizeof(zed_token_t));
-	return assembler_name_token(&(*list)[(*count)++], string);
+	return assembler_name_token(&(*list)[(*count)++], string); // *lol*
 }
 
 static inline uint8_t assembler_token_to_number(zed_token_t* self, int64_t* value_reference) { // returns 0 on success
@@ -186,18 +186,18 @@ static int assemble(void) {
 				zed_token_free(&token);
 				
 			} else if (!IS_WHITE(*current)) {
-				int64_t instruction, _register, position_ptr, data_ptr, kfunc_ptr;
+				int64_t opcode, _register, position_ptr, data_ptr, kfunc_ptr;
 
 				zed_token_t token = { 0 };
 				current += 1 + assembler_name_token(&token, current);
 
-				// go though all instructions, registers, &c to try and find a match
+				// go though all opcodes, registers, &c to try and find a match
 
-				if      ((instruction  = zed_token_find(zed_instructions, sizeof(zed_instructions) / sizeof(*zed_instructions), token.name)) >= 0) rom_add(ZED_TYPE_INSTRUCTION, instruction);
-				else if ((_register    = zed_token_find(zed_registers,    sizeof(zed_registers   ) / sizeof(*zed_registers   ), token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_REGISTER, _register);
-				else if ((position_ptr = zed_token_find(position_labels,  position_label_count,                                 token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_POSITION_INDEX, position_ptr);
-				else if ((data_ptr     = zed_token_find(data_labels,      data_label_count,                                     token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_DATA_INDEX, data_ptr);
-				else if ((kfunc_ptr    = zed_token_find(zed_kfuncs,       sizeof(zed_kfuncs      ) / sizeof(*zed_kfuncs      ), token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_KFUNC_INDEX, kfunc_ptr);
+				if      ((opcode       = zed_token_find(zed_opcodes,     sizeof(zed_opcodes  ) / sizeof(*zed_opcodes  ), token.name)) >= 0) rom_add(ZED_TYPE_OPCODE, opcode);
+				else if ((_register    = zed_token_find(zed_registers,   sizeof(zed_registers) / sizeof(*zed_registers), token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_REGISTER, _register);
+				else if ((position_ptr = zed_token_find(position_labels, position_label_count,                           token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_POSITION_INDEX, position_ptr);
+				else if ((data_ptr     = zed_token_find(data_labels,     data_label_count,                               token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_DATA_INDEX, data_ptr);
+				else if ((kfunc_ptr    = zed_token_find(zed_kfuncs,      sizeof(zed_kfuncs   ) / sizeof(*zed_kfuncs   ), token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_KFUNC_INDEX, kfunc_ptr);
 				
 				else if (token.name[1] == '?' || token.name[0] == '?') {
 					char* string = (char*) 0;
