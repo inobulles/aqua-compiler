@@ -116,8 +116,8 @@ static inline void rom_create(void) {
 	rom_bytes = 0;
 	rom_data = (uint8_t*) 0;
 
-	position_label_count = 1; // first position is the main position, so allocate that
-	position_labels = (zed_token_t*) malloc(position_label_count * sizeof(zed_token_t));
+	position_label_count = 0;
+	position_labels = (zed_token_t*) 0;
 	
 	data_label_count = 0;
 	data_labels = (zed_token_t*) 0;
@@ -183,11 +183,11 @@ static inline void rom_build(void) {
 	meta_section.logic_section_offset = rom_bytes;
 	meta_section.logic_section_words = logic_section_words;
 
-	uint64_t logic_section_bytes = logic_section_words * sizeof(uint64_t);
+	uint64_t logic_section_bytes = logic_section_words * sizeof(zed_instruction_t);
 
 	rom_data = (uint8_t*) realloc(rom_data, rom_bytes + logic_section_bytes);
 	memcpy(rom_data + rom_bytes, logic_section_data, logic_section_bytes);
-	
+
 	rom_bytes += logic_section_bytes;
 	memcpy(rom_data, &meta_section, sizeof(meta_section)); // write the meta section to the rom
 }

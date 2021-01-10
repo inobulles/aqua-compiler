@@ -85,15 +85,15 @@ static int assemble(void) {
 					current_data_label = (zed_token_t*) 0;
 					
 				} else if (!IS_WHITE(*current)) {
-					zed_token_t token = { 0 };
-					current += assembler_name_token(&token, current);
+					zed_token_t dummy_token = { 0 };
+					current += assembler_name_token(&dummy_token, current);
 
 					int64_t byte = 0;
-					if (assembler_token_to_number(&token, &byte)) {
-						printf("[ZASM Language] WARNING Line %ld, found unknown token '%s' in data label '%s'\n", current_line_number, token.name, current_data_label->name);
+					if (assembler_token_to_number(&dummy_token, &byte)) {
+						printf("[ZASM Language] WARNING Line %ld, found unknown token '%s' in data label '%s'\n", current_line_number, dummy_token.name, current_data_label->name);
 					}
 
-					zed_token_free(&token); // important because memory leak otherwise
+					zed_token_free(&dummy_token); // important because memory leak otherwise
 
 					if (byte > 0xFF) {
 						printf("[ZASM Language] WARNING Line %ld, value '0x%lx' does not fit in a byte, cropping to least significant byte (0x%lx) ...\n", current_line_number, byte, byte % 0x100);
@@ -172,18 +172,18 @@ static int assemble(void) {
 			} else if (*current == POSITION_LABEL_TOKEN) { // found position label
 				rom_validate_instruction();
 
-				zed_token_t token = { 0 };
-				current += 2 + assembler_name_token(&token, current + 1);
-				
-				if (strcmp(token.name, "main") == 0) {
+				zed_token_t dummy_token = { 0 };
+				current += 2 + assembler_name_token(&dummy_token, current + 1);
+
+				if (strcmp(dummy_token.name, "main") == 0) {
 					found_main_label = 1;
 					position_labels[0].position = logic_section_words;
 
 				} else {
-					position_labels[zed_token_find(position_labels, position_label_count, token.name)].position = logic_section_words;
+					position_labels[zed_token_find(position_labels, position_label_count, dummy_token.name)].position = logic_section_words;
 				}
 
-				zed_token_free(&token);
+				zed_token_free(&dummy_token);
 				
 			} else if (!IS_WHITE(*current)) {
 				int64_t opcode, _register, position_ptr, data_ptr, kfunc_ptr;
