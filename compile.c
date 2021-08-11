@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
 	uint8_t debug = 0;
 
 	printf("[AQUA Compiler] Parsing arguments ...\n");
+
 	for (int i = 1; i < argc; i++) {
 		if (strncmp(argv[i], "--", 2) == 0) {
 			char* option = argv[i] + 2;
@@ -98,7 +99,7 @@ int main(int argc, char** argv) {
 
 	printf("[AQUA Compiler] Changing directory to input path ...\n");
 	if (chdir(real_input_path) < 0) {
-		fprintf(stderr, "[AQUA Compiler] Input path '%s' doesn't seem to exist\n", input_path);
+		fprintf(stderr, "[AQUA Compiler] ERROR Input path '%s' doesn't seem to exist\n", input_path);
 		return 1;
 	}
 

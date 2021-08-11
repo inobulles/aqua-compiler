@@ -42,7 +42,7 @@ static inline int64_t assembler_name_token(zed_token_t* self, char* string) {
 
 static inline int64_t assembler_add_token(zed_token_t** list, uint64_t* count, char* string) {
 	*list = (zed_token_t*) realloc(*list, (*count + 1) * sizeof(zed_token_t));
-	return assembler_name_token(&(*list)[(*count)++], string); // *lol*
+	return assembler_name_token(&(*list)[(*count)++], string); // *lol* :sushi:
 }
 
 static inline uint8_t assembler_token_to_number(zed_token_t* self, int64_t* value_reference) { // returns 0 on success
@@ -55,7 +55,7 @@ static inline uint8_t assembler_token_to_number(zed_token_t* self, int64_t* valu
 	return endptr == self->name || strlen(endptr);
 }
 
-// actual nice, juicy, meaty functions
+// actual nice, juicy, meaty functions :meat_on_bone::cut_of_meat:
 
 static int assemble(void) {
 	// first pass (get position and data labels)
@@ -68,8 +68,10 @@ static int assemble(void) {
 	current_line_number = 1;
 	uint64_t last_line_number_for_string_outside_data_label_warning = -1;
 
+	uint8_t found_main_label = 0;
+
 	for (char* current = code; current - code < code_bytes; current++) {
-		// the order of all these if's is very important
+		// :warning: the order of all these if's is very important
 
 		if      (!in_string  && *current == '\n') current_line_number++, in_comment = 0;
 		else if (!in_comment && *current == '"' ) in_string  = !in_string;
@@ -93,7 +95,7 @@ static int assemble(void) {
 						printf("[ZASM Language] WARNING Line %ld, found unknown token '%s' in data label '%s'\n", current_line_number, dummy_token.name, current_data_label->name);
 					}
 
-					zed_token_free(&dummy_token); // important because memory leak otherwise
+					zed_token_free(&dummy_token); // important because memory leak otherwise :sweat_drops:
 
 					if (byte > 0xFF) {
 						printf("[ZASM Language] WARNING Line %ld, value '0x%lx' does not fit in a byte, cropping to least significant byte (0x%lx) ...\n", current_line_number, byte, byte % 0x100);
@@ -104,29 +106,37 @@ static int assemble(void) {
 				}
 				
 			} else if (!in_string && *current == POSITION_LABEL_TOKEN) { // found position label
-				current += 2 + assembler_add_token(&position_labels, &position_label_count, current + 1);
+				current += 2 + assembler_add_token(&zed_position_labels, &zed_position_label_count, current + 1);
 
-				if (assembler_extra_checks && zed_token_find(position_labels, position_label_count - 1, position_labels[position_label_count - 1].name) >= 0) {
-					printf("[ZASM Language] WARNING Line %ld, position label '%s' declared multiple times\n", current_line_number, position_labels[position_label_count - 1].name);
+				if (strcmp(zed_position_labels[zed_position_label_count - 1].name, "main") == 0) {
+					if (found_main_label) {
+						printf("[ZASM Language] WARNING Line %ld, main label declared multiple times\n", current_line_number);
+					}
+
+					found_main_label = 1;
+					zed_position_label_count--; // we need to remove the last label since the main position label is already defined at index 0
+
+				} else if (assembler_extra_checks && zed_token_find(zed_position_labels + 1 /* don't count position label at index 0 (main) */, zed_position_label_count - 2, zed_position_labels[zed_position_label_count - 1].name) >= 0) {
+					printf("[ZASM Language] WARNING Line %ld, position label '%s' declared multiple times\n", current_line_number, zed_position_labels[zed_position_label_count - 1].name);
 				}
 
 				if (*current != POSITION_LABEL_TOKEN) {
-					printf("[ZASM Language] WARNING Line %ld, unterminated position label '%s'\n", current_line_number, position_labels[position_label_count - 1].name);
+					printf("[ZASM Language] WARNING Line %ld, unterminated position label '%s'\n", current_line_number, zed_position_labels[zed_position_label_count - 1].name);
 				}
 
 			} else if (!in_string && *current == DATA_LABEL_TOKEN) { // found data label
-				current += 1 + assembler_add_token(&data_labels, &data_label_count, current + 1);
+				current += 1 + assembler_add_token(&zed_data_labels, &zed_data_label_count, current + 1);
 
-				if (assembler_extra_checks && zed_token_find(data_labels, data_label_count - 1, data_labels[data_label_count - 1].name) >= 0) {
-					printf("[ZASM Language] WARNING Line %ld, data label '%s' declared multiple times\n", current_line_number, data_labels[data_label_count - 1].name);
+				if (assembler_extra_checks && zed_token_find(zed_data_labels, zed_data_label_count - 1, zed_data_labels[zed_data_label_count - 1].name) >= 0) {
+					printf("[ZASM Language] WARNING Line %ld, data label '%s' declared multiple times\n", current_line_number, zed_data_labels[zed_data_label_count - 1].name);
 				}
 
 				if (*current != DATA_LABEL_TOKEN) {
-					current_data_label = &data_labels[data_label_count - 1];
+					current_data_label = &zed_data_labels[zed_data_label_count - 1];
 				}
 
 			} else if (in_string) { // illegal state
-				if (*current == '\n') { // even criminals need to keep track of their lines 😎
+				if (*current == '\n') { // even criminals need to keep track of their lines :sunglasses:
 					current_line_number++;
 					in_comment = 0;
 				}
@@ -141,6 +151,7 @@ static int assemble(void) {
 
 	if (in_string) printf("[ZASM Language] WARNING Unterminated string\n");
 	if (current_data_label) printf("[ZASM Language] WARNING Unterminated data label '%s'\n", current_data_label->name);
+	if (!found_main_label) printf("[ZASM Language] WARNING Couldn't find the main position label\n");
 
 	// second pass (parse tokens and create logic section)
 	
@@ -148,12 +159,11 @@ static int assemble(void) {
 	in_string = 0;
 	
 	uint8_t in_data_section = 0;
-	uint8_t found_main_label = 0;
 	
 	current_line_number = 1;
 
 	for (char* current = code; current - code < code_bytes; current++) {
-		// the order of all these if's is very important
+		// :warning: the order of all these if's is very important
 		
 		if      (               *current == '\n') current_line_number++, in_comment = 0;
 		else if (!in_comment && *current == '"' ) in_string  = !in_string;
@@ -166,23 +176,16 @@ static int assemble(void) {
 				}
 				
 			} else if (*current == DATA_LABEL_TOKEN) { // found data label
-				rom_validate_instruction();
+				zed_rom_validate_instruction();
 				in_data_section = 1;
 				
 			} else if (*current == POSITION_LABEL_TOKEN) { // found position label
-				rom_validate_instruction();
+				zed_rom_validate_instruction();
 
 				zed_token_t dummy_token = { 0 };
 				current += 2 + assembler_name_token(&dummy_token, current + 1);
 
-				if (strcmp(dummy_token.name, "main") == 0) {
-					found_main_label = 1;
-					position_labels[0].position = logic_section_words;
-
-				} else {
-					position_labels[zed_token_find(position_labels, position_label_count, dummy_token.name)].position = logic_section_words;
-				}
-
+				zed_position_labels[zed_token_find(zed_position_labels, zed_position_label_count, dummy_token.name)].position = zed_logic_section_words;
 				zed_token_free(&dummy_token);
 				
 			} else if (!IS_WHITE(*current)) {
@@ -193,11 +196,11 @@ static int assemble(void) {
 
 				// go though all opcodes, registers, &c to try and find a match
 
-				if      ((opcode       = zed_token_find(zed_opcodes,     sizeof(zed_opcodes  ) / sizeof(*zed_opcodes  ), token.name)) >= 0) rom_add(ZED_TYPE_OPCODE, opcode);
-				else if ((_register    = zed_token_find(zed_registers,   sizeof(zed_registers) / sizeof(*zed_registers), token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_REGISTER, _register);
-				else if ((position_ptr = zed_token_find(position_labels, position_label_count,                           token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_POSITION_INDEX, position_ptr);
-				else if ((data_ptr     = zed_token_find(data_labels,     data_label_count,                               token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_DATA_INDEX, data_ptr);
-				else if ((kfunc_ptr    = zed_token_find(zed_kfuncs,      sizeof(zed_kfuncs   ) / sizeof(*zed_kfuncs   ), token.name)) >= 0) rom_add(ZED_OPERAND_16_TYPE_KFUNC_INDEX, kfunc_ptr);
+				if      ((opcode       = zed_token_find(zed_opcodes,         sizeof(zed_opcodes  ) / sizeof(*zed_opcodes  ), token.name)) >= 0) zed_rom_add(ZED_TYPE_OPCODE, opcode);
+				else if ((_register    = zed_token_find(zed_registers,       sizeof(zed_registers) / sizeof(*zed_registers), token.name)) >= 0) zed_rom_add(ZED_OPERAND_16_TYPE_REGISTER, _register);
+				else if ((position_ptr = zed_token_find(zed_position_labels, zed_position_label_count,                       token.name)) >= 0) zed_rom_add(ZED_OPERAND_16_TYPE_POSITION_INDEX, position_ptr);
+				else if ((data_ptr     = zed_token_find(zed_data_labels,     zed_data_label_count,                           token.name)) >= 0) zed_rom_add(ZED_OPERAND_16_TYPE_DATA_INDEX, data_ptr);
+				else if ((kfunc_ptr    = zed_token_find(zed_kfuncs,          sizeof(zed_kfuncs   ) / sizeof(*zed_kfuncs   ), token.name)) >= 0) zed_rom_add(ZED_OPERAND_16_TYPE_KFUNC_INDEX, kfunc_ptr);
 				
 				else if (token.name[1] == '?' || token.name[0] == '?') {
 					char* string = (char*) 0;
@@ -217,7 +220,7 @@ static int assemble(void) {
 					
 					if (string) { // create the cla instruction chain (or not if is a single register)
 						if ((_register = zed_token_find(zed_registers, sizeof(zed_registers) / sizeof(*zed_registers), string)) >= 0) {
-							rom_add(token_type, _register);
+							zed_rom_add(token_type, _register);
 
 						} else {
 							printf("[ZASM Language] WARNING Line %ld, address '%s' is not a register\n", current_line_number, string);
@@ -231,7 +234,7 @@ static int assemble(void) {
 						printf("[ZASM Language] WARNING Line %ld, unknown token or identifier '%s'\n", current_line_number, token.name);
 
 					} else {
-						rom_add(ZED_OPERAND_16_TYPE_CONSTANT, number);
+						zed_rom_add(ZED_OPERAND_16_TYPE_CONSTANT, number);
 					}
 				}
 
@@ -240,11 +243,6 @@ static int assemble(void) {
 		}
 	}
 	
-	if (!found_main_label) {
-		printf("[ZASM Language] WARNING Couldn't find the main position label\n");
-	}
-
-	rom_validate_instruction(); // make sure we validate the last instruction
 	return 0;
 }
 
@@ -301,7 +299,7 @@ int main(int argc, char** argv) {
 	fread(code, sizeof(char), code_bytes, input);
 	
 	printf("[ZASM Language] Creating ROM ...\n");
-	rom_create();
+	zed_rom_create();
 
 	printf("[ZASM Language] Assembling code ...\n");
 	if (assemble()) {
@@ -312,11 +310,11 @@ int main(int argc, char** argv) {
 	}
 	
 	printf("[ZASM Language] Building ROM ...\n");
-	rom_build();
+	zed_rom_build();
 
 	printf("[ZASM Language] Outputting ROM ...\n");
 
-	char* rom_path = (char*) malloc(strlen(output_path) + 9 /* strlen("/rom.zed") + 1 */); // no risk of memory leak
+	char* rom_path = (char*) malloc(strlen(output_path) + 9 /* strlen("/rom.zed") + 1 */); // no risk of memory leak :sweat_drops::sweat_drops::sweat_drops:
 	sprintf(rom_path, "%s/rom.zed", output_path);
 	
 	output = fopen(rom_path, "wb");
@@ -327,8 +325,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	
-	if (rom_data) {
-		fwrite(rom_data, sizeof(uint8_t), rom_bytes, output);
+	if (zed_rom_data) {
+		fwrite(zed_rom_data, sizeof(uint8_t), zed_rom_bytes, output);
 	}
 	
 	assembler_free();
