@@ -131,10 +131,6 @@ int main(int argc, char** argv) {
 	fprintf(start_fp, "zed");
 	fclose(start_fp);
 
-	FILE* feature_set_fp = fopen("feature_set", "wb");
-	fprintf(feature_set_fp, "");
-	fclose(feature_set_fp);
-
 	printf("[AQUA Compiler] Changing directory back to input path ...\n");
 	chdir(real_input_path);
 
